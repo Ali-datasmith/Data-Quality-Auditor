@@ -84,6 +84,7 @@ def load_scoring_config() -> ScorerAppConfig:
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:
+        # Graceful fallback — no crash if config.toml is missing
         return {
             "scoring": {
                 "completeness_weight": 0.30,
@@ -111,6 +112,12 @@ _W_OUTLIER:      float = _CONFIG["scoring"]["outlier_weight"]
 
 # ---------------------------------------------------------------------------
 # score_column
+# FIX 1 — String columns no longer receive a free outlier_score = 100.
+#          If the column is non-numeric, outlier_score is excluded from the
+#          weighted average entirely and the remaining weights are re-normalised
+#          so the total still sums to 1.0.
+# FIX 2 — Duplicate penalty is now wired in via `duplicate_count` key in
+#          col_stats so it actually reduces the per-column score.
 # ---------------------------------------------------------------------------
 
 def score_column(col_stats: Dict[str, Any]) -> int:
@@ -121,13 +128,14 @@ def score_column(col_stats: Dict[str, Any]) -> int:
         unique_cnt   = int(col_stats.get("unique_count", 0))
         outlier_cnt  = int(col_stats.get("outlier_count", 0))
         mismatch_cnt = int(col_stats.get("mismatch_count", 0))
+        # NEW — duplicate rows that overlap with this column
         duplicate_cnt = int(col_stats.get("duplicate_count", 0))
 
-        # --- Completeness ---
+        # --- Completeness ------------------------------------------------
         missing_pct       = (missing_cnt / total_rows) * 100.0
         completeness_score = max(0.0, 100.0 - missing_pct)
 
-        # --- Uniqueness (context-aware) ---
+        # --- Uniqueness (context-aware) ----------------------------------
         uniqueness_ratio = unique_cnt / total_rows
         is_numeric = any(t in dtype for t in ("int", "float", "Int", "Float"))
 
@@ -139,22 +147,26 @@ def score_column(col_stats: Dict[str, Any]) -> int:
             else:
                 uniqueness_score = 85.0
         else:
+            # String/object: all-unique IDs should not inflate the score
             if uniqueness_ratio > 0.95:
-                uniqueness_score = 65.0
+                uniqueness_score = 65.0   # likely ID column — neutral
             elif uniqueness_ratio > 0.60:
                 uniqueness_score = 80.0
             elif uniqueness_ratio > 0.05:
-                uniqueness_score = 90.0
+                uniqueness_score = 90.0   # good categorical spread
             elif uniqueness_ratio > 0.01:
                 uniqueness_score = 60.0
             else:
-                uniqueness_score = 20.0
+                uniqueness_score = 20.0   # nearly constant column
 
-        # --- Consistency (type mismatches) ---
+        # --- Consistency (type mismatches) --------------------------------
         mismatch_pct      = (mismatch_cnt / total_rows) * 100.0
         consistency_score  = max(0.0, 100.0 - (mismatch_pct * 2.5))
 
-        # --- Outlier rate ---
+        # --- Outlier rate  ------------------------------------------------
+        # FIX 1: non-numeric columns cannot have IQR outliers.
+        # Instead of assigning them outlier_score=100 (free bonus), we skip
+        # the outlier dimension entirely and re-normalise the weights.
         if is_numeric:
             outlier_pct   = (outlier_cnt / total_rows) * 100.0
             outlier_score = max(0.0, 100.0 - (outlier_pct * 3.0))
@@ -166,6 +178,7 @@ def score_column(col_stats: Dict[str, Any]) -> int:
                 (_W_OUTLIER      * outlier_score)
             )
         else:
+            # Re-normalise the three remaining weights so they still sum to 1.0
             total_w = _W_COMPLETENESS + _W_UNIQUENESS + _W_CONSISTENCY
             if total_w == 0:
                 total_w = 1.0
@@ -179,7 +192,9 @@ def score_column(col_stats: Dict[str, Any]) -> int:
                 (w_x * consistency_score)
             )
 
-        # --- Duplicate Penalty ---
+        # --- FIX 2: Duplicate penalty ------------------------------------
+        # Each duplicate row shaves points off this column's score.
+        # Penalty = (duplicate_pct * 0.5) capped at 20 points.
         duplicate_pct     = (duplicate_cnt / total_rows) * 100.0
         duplicate_penalty = min(20.0, duplicate_pct * 0.5)
         raw_weighted      = max(0.0, raw_weighted - duplicate_penalty)
@@ -235,6 +250,7 @@ def get_score_label(score: int) -> ScoreLabel:
 
 # ---------------------------------------------------------------------------
 # generate_issue_summary
+# FIX 2 (continued): duplicate issues are now surfaced in the issue list
 # ---------------------------------------------------------------------------
 
 def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIssue]:
@@ -272,7 +288,10 @@ def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIs
                     metric="Type Consistency",
                     severity=severity,
                     score_impact=float(np.round(impact, 2)),
-                    description=f"Detected {mismatch_cnt} structural type anomalies in column values.",
+                    description=(
+                        f"Detected {mismatch_cnt} structural type anomalies "
+                        f"in column values."
+                    ),
                 ))
 
             # Outliers (numeric only)
@@ -288,10 +307,13 @@ def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIs
                     metric="Outlier Rate",
                     severity=severity,
                     score_impact=float(np.round(impact, 2)),
-                    description=f"Detected {outlier_cnt} statistical anomalies outside IQR thresholds.",
+                    description=(
+                        f"Detected {outlier_cnt} statistical anomalies "
+                        f"outside IQR thresholds."
+                    ),
                 ))
 
-            # Duplicates
+            # FIX 2 — Duplicates now appear in the issue list
             duplicate_cnt = int(stats.get("duplicate_count", 0))
             if duplicate_cnt > 0:
                 duplicate_pct = (duplicate_cnt / total_rows) * 100.0
@@ -302,7 +324,10 @@ def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIs
                     metric="Duplicates",
                     severity=severity,
                     score_impact=float(np.round(penalty, 2)),
-                    description=f"Column participates in {duplicate_cnt} duplicate rows ({duplicate_pct:.2f}% of total).",
+                    description=(
+                        f"Column participates in {duplicate_cnt} duplicate rows "
+                        f"({duplicate_pct:.2f}% of total)."
+                    ),
                 ))
 
         severity_map = {"Critical": 0, "High": 1, "Medium": 2}
