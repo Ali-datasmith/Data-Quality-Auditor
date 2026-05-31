@@ -1,0 +1,16 @@
+[scoring]
+completeness_weight = 0.40
+uniqueness_weight = 0.20
+consistency_weight = 0.20
+outlier_weight = 0.20
+
+[detection]
+outlier_iqr_multiplier = 1.5
+duplicate_subset = "all"
+max_upload_mb = 200
+
+[grades]
+excellent = 85
+good = 70
+fair = 50
+poor = 30
