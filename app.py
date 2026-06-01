@@ -1,5 +1,3 @@
-# app.py
-
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict
@@ -30,12 +28,14 @@ from ui.dashboard import (
     render_issue_list,
 )
 from ui.report_card import render_column_card, render_suggestion_box
+from ui.login import render_login_page
 from utils.cleaner import (
     suggest_fixes,
     apply_fixes,
     export_cleaned_csv,
     generate_change_log,
 )
+from credentials import get_user_name
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +109,9 @@ _CONFIG: AppConfig = load_app_config()
 def initialize_session_state() -> None:
     try:
         defaults: Dict[str, Any] = {
+            "authenticated": False,
+            "username":      None,
+            "user_name":     None,
             "raw_df":        None,
             "cleaned_df":    None,
             "selected_fixes": [],
@@ -158,6 +161,8 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
                 "lower_fence":       outlier_report.lower_fence,
                 "upper_fence":       outlier_report.upper_fence,
                 "mismatch_count":    mismatch_count,
+                # NEW — duplicate count wired into every column so scorer
+                # can apply the duplicate penalty correctly
                 "duplicate_count":   dup_report.count,
                 "total_rows":        total_rows,
             }
@@ -333,6 +338,7 @@ def _render_landing() -> None:
 
 def main() -> None:
     try:
+        # FIX: duplicate page_icon and duplicate initial_sidebar_state args removed
         st.set_page_config(
             page_title="Data Quality Auditor",
             page_icon="🛡️",
@@ -341,12 +347,23 @@ def main() -> None:
         )
 
         initialize_session_state()
+
+        # ===== AUTHENTICATION CHECK =====
+        # Must happen BEFORE _inject_neon_css() and BEFORE main UI rendering
+        if not st.session_state.get("authenticated", False):
+            render_login_page()
+            return  # Stop — don't render the main app until login succeeds
+
+        # ===== MAIN APP STARTS HERE =====
         _inject_neon_css()
 
         df: Optional[pd.DataFrame] = render_sidebar()
 
+        # New file uploaded — reset all cached analysis so it re-runs cleanly
         if df is not None:
             st.session_state["raw_df"]       = df
+            # FIX: was reset twice (`cleaned_df = None` appeared on two consecutive
+            # lines). Now each key is set exactly once.
             st.session_state["cleaned_df"]   = None
             st.session_state["profile"]      = None
             st.session_state["col_scores"]   = None
@@ -368,6 +385,37 @@ def main() -> None:
         )
         st.markdown("---")
 
+        # ===== SIDEBAR USER INFO & LOGOUT =====
+        with st.sidebar:
+            st.markdown("---")
+            username = st.session_state.get("username", "user")
+            st.markdown(
+                f"""
+                <div style='
+                    background: rgba(0,255,255,0.05);
+                    border: 1px solid rgba(0,255,255,0.2);
+                    border-radius: 6px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                    font-size: 11px;
+                    letter-spacing: 1px;
+                '>
+                    <span style='color: rgba(0,255,255,0.5);'>👤 LOGGED IN AS</span><br>
+                    <span style='color: #00FFFF; font-weight: 700;'>{username.upper()}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            
+            if st.button("🚪 LOGOUT", key="logout_btn", use_container_width=True):
+                st.session_state["authenticated"] = False
+                st.session_state["username"] = None
+                st.session_state["user_name"] = None
+                st.rerun()
+            
+            st.markdown("---")
+
+        # Run analysis once and cache in session state
         if st.session_state.get("profile") is None:
             with st.spinner("SCANNING DATA MATRIX..."):
                 profile      = _build_enriched_profile(active_df)
@@ -380,11 +428,12 @@ def main() -> None:
                 st.session_state["overall_score"] = overall_score
                 st.session_state["issues"]        = issues
 
-        profile:        Dict[str, Dict[str, Any]] = st.session_state["profile"]
-        col_scores:     Dict[str, int]            = st.session_state["col_scores"]
+        profile:       Dict[str, Dict[str, Any]] = st.session_state["profile"]
+        col_scores:    Dict[str, int]            = st.session_state["col_scores"]
         overall_score: int                       = st.session_state["overall_score"]
         issues:        List[Any]                 = st.session_state["issues"]
 
+        # Duplicate report (lightweight — not cached, uses session iqr pref)
         dup_report     = detect_duplicates(active_df)
         duplicate_count = dup_report.count
 
@@ -419,6 +468,8 @@ def main() -> None:
         )
         render_suggestion_box(all_suggestions)
 
+        # FIX: two separate execute buttons existed (one from old code, one from new).
+        # Merged into a single button with change log feedback.
         if st.button("EXECUTE ALL FIXES", type="primary", key="execute_fixes_btn"):
             with st.spinner("APPLYING REMEDIATIONS..."):
                 cleaned = apply_fixes(active_df, [s.__dict__ for s in all_suggestions])
@@ -432,6 +483,7 @@ def main() -> None:
         cleaned_df: Optional[pd.DataFrame] = st.session_state.get("cleaned_df")
         if cleaned_df is not None:
             csv_bytes = export_cleaned_csv(cleaned_df)
+            # FIX: duplicate label and duplicate type= args removed
             st.download_button(
                 label="⬇ DOWNLOAD CLEANED CSV",
                 data=csv_bytes,
