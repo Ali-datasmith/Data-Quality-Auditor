@@ -147,24 +147,24 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
                 if m.get("column") == col_name
             )
             enriched[col_name] = {
-                "dtype":             col_profile.dtype,
-                "missing_count":     col_profile.missing_count,
+                "dtype":              col_profile.dtype,
+                "missing_count":      col_profile.missing_count,
                 "missing_percentage": col_profile.missing_percentage,
-                "unique_count":      col_profile.unique_count,
-                "min_value":         col_profile.min_value,
-                "max_value":         col_profile.max_value,
-                "mean_value":        col_profile.mean_value,
-                "std_value":         col_profile.std_value,
-                "top_values":        col_profile.top_values,
-                "outlier_count":     outlier_report.count,
-                "outlier_indices":   outlier_report.indices,
-                "lower_fence":       outlier_report.lower_fence,
-                "upper_fence":       outlier_report.upper_fence,
-                "mismatch_count":    mismatch_count,
+                "unique_count":       col_profile.unique_count,
+                "min_value":          col_profile.min_value,
+                "max_value":          col_profile.max_value,
+                "mean_value":         col_profile.mean_value,
+                "std_value":          col_profile.std_value,
+                "top_values":         col_profile.top_values,
+                "outlier_count":      outlier_report.count,
+                "outlier_indices":    outlier_report.indices,
+                "lower_fence":        outlier_report.lower_fence,
+                "upper_fence":        outlier_report.upper_fence,
+                "mismatch_count":     mismatch_count,
                 # NEW — duplicate count wired into every column so scorer
                 # can apply the duplicate penalty correctly
-                "duplicate_count":   dup_report.count,
-                "total_rows":        total_rows,
+                "duplicate_count":    dup_report.count,
+                "total_rows":         total_rows,
             }
         return enriched
     except Exception as e:
@@ -191,100 +191,252 @@ def _inject_neon_css() -> None:
         html, body, [class*="css"] {
             font-family: 'JetBrains Mono', monospace !important;
         }
+
+        /* ── Master background — deep neon space ── */
         .stApp {
-            background-color: #0A0E1A !important;
+            background:
+                radial-gradient(ellipse at 15% 40%, rgba(0,255,255,0.05) 0%, transparent 55%),
+                radial-gradient(ellipse at 85% 15%, rgba(0,180,255,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 60% 80%, rgba(0,100,255,0.04) 0%, transparent 50%),
+                linear-gradient(160deg, #060A13 0%, #0A0E1A 45%, #0C1120 100%) !important;
         }
+
+        /* ── Sidebar — glassmorphism panel ── */
         section[data-testid="stSidebar"] {
-            background-color: #0D1220 !important;
-            border-right: 1px solid rgba(0, 255, 255, 0.15) !important;
+            background: rgba(10, 14, 26, 0.75) !important;
+            backdrop-filter: blur(20px) saturate(160%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+            border-right: 1px solid rgba(0, 255, 255, 0.12) !important;
+            box-shadow: 4px 0 32px rgba(0, 0, 0, 0.5) !important;
         }
+
+        /* ── Typography ── */
         h1, h2, h3, h4, h5, h6 {
             color: #00FFFF !important;
             font-family: 'JetBrains Mono', monospace !important;
-            text-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+            text-shadow: 0 0 16px rgba(0, 255, 255, 0.35), 0 0 32px rgba(0,255,255,0.1);
             letter-spacing: 2px;
         }
         p, label, span, div {
             color: #E0F7FA !important;
         }
+
+        /* ── Metric cards — glass ── */
         [data-testid="stMetric"] {
-            background: linear-gradient(135deg, rgba(0,255,255,0.05), rgba(0,255,255,0.02));
-            border: 1px solid rgba(0, 255, 255, 0.25);
-            border-radius: 8px;
-            padding: 16px !important;
+            background: rgba(13, 18, 32, 0.6) !important;
+            border: 1px solid rgba(0, 255, 255, 0.2) !important;
+            border-radius: 12px !important;
+            padding: 20px !important;
+            backdrop-filter: blur(16px) saturate(150%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+            box-shadow:
+                0 4px 24px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(0,255,255,0.05) inset,
+                0 0 20px rgba(0,255,255,0.04) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+        }
+        [data-testid="stMetric"]:hover {
+            transform: translateY(-2px) !important;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.5),
+                0 0 0 1px rgba(0,255,255,0.1) inset,
+                0 0 28px rgba(0,255,255,0.08) !important;
         }
         [data-testid="stMetricLabel"] {
-            color: rgba(0, 255, 255, 0.7) !important;
-            font-size: 11px !important;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+            color: rgba(0, 255, 255, 0.65) !important;
+            font-size: 10px !important;
+            letter-spacing: 3px !important;
+            text-transform: uppercase !important;
         }
         [data-testid="stMetricValue"] {
             color: #00FFFF !important;
-            font-size: 28px !important;
+            font-size: 30px !important;
             font-weight: 700 !important;
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            text-shadow: 0 0 12px rgba(0, 255, 255, 0.5) !important;
         }
         [data-testid="stMetricDelta"] {
-            color: rgba(0, 255, 255, 0.6) !important;
+            color: rgba(0, 255, 255, 0.55) !important;
             font-size: 11px !important;
         }
+
+        /* ── Buttons — glass neon ── */
         .stButton > button {
-            background: transparent !important;
-            border: 1px solid #00FFFF !important;
+            background: linear-gradient(135deg, rgba(0,255,255,0.08), rgba(0,180,255,0.05)) !important;
+            border: 1px solid rgba(0, 255, 255, 0.4) !important;
             color: #00FFFF !important;
             font-family: 'JetBrains Mono', monospace !important;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            transition: all 0.2s ease;
+            font-size: 12px !important;
+            letter-spacing: 3px !important;
+            text-transform: uppercase !important;
+            border-radius: 8px !important;
+            backdrop-filter: blur(8px) !important;
+            transition: all 0.25s ease !important;
         }
         .stButton > button:hover {
-            background: rgba(0, 255, 255, 0.1) !important;
-            box-shadow: 0 0 16px rgba(0, 255, 255, 0.3);
+            background: linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,180,255,0.12)) !important;
+            box-shadow: 0 0 24px rgba(0, 255, 255, 0.3), 0 4px 16px rgba(0,0,0,0.4) !important;
+            transform: translateY(-2px) !important;
+            border-color: #00FFFF !important;
+        }
+        .stButton > button:active {
+            transform: translateY(0px) !important;
         }
         .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, rgba(0,255,255,0.15), rgba(0,200,255,0.1)) !important;
             border-color: #00FFFF !important;
-            box-shadow: 0 0 12px rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 16px rgba(0, 255, 255, 0.25) !important;
         }
+
+        /* ── File uploader ── */
         [data-testid="stFileUploader"] {
+            background: rgba(13, 18, 32, 0.5) !important;
             border: 1px dashed rgba(0, 255, 255, 0.3) !important;
-            border-radius: 8px;
-            background: rgba(0, 255, 255, 0.02) !important;
+            border-radius: 10px !important;
+            backdrop-filter: blur(8px) !important;
         }
+
+        /* ── DataFrame ── */
         .stDataFrame, [data-testid="stDataFrame"] {
+            background: rgba(10, 14, 26, 0.6) !important;
             border: 1px solid rgba(0, 255, 255, 0.15) !important;
-            border-radius: 8px;
+            border-radius: 10px !important;
+            backdrop-filter: blur(12px) !important;
+            overflow: hidden;
         }
+
+        /* ── Expander — glass card ── */
         .stExpander {
-            border: 1px solid rgba(0, 255, 255, 0.2) !important;
-            border-radius: 8px !important;
-            background: rgba(0, 255, 255, 0.02) !important;
+            background: rgba(13, 18, 32, 0.55) !important;
+            border: 1px solid rgba(0, 255, 255, 0.18) !important;
+            border-radius: 12px !important;
+            backdrop-filter: blur(16px) saturate(140%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,255,255,0.04) inset !important;
         }
         .stExpander summary {
             color: #00FFFF !important;
+            letter-spacing: 1px !important;
         }
+        .stExpander summary:hover {
+            color: #80FFFF !important;
+        }
+
+        /* ── Text inputs ── */
+        .stTextInput input, .stNumberInput input {
+            background: rgba(10, 14, 26, 0.7) !important;
+            border: 1px solid rgba(0, 255, 255, 0.25) !important;
+            border-radius: 8px !important;
+            color: #E0F7FA !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            backdrop-filter: blur(8px) !important;
+        }
+        .stTextInput input:focus, .stNumberInput input:focus {
+            border-color: #00FFFF !important;
+            box-shadow: 0 0 0 3px rgba(0,255,255,0.1), 0 0 16px rgba(0,255,255,0.12) !important;
+        }
+
+        /* ── Selectbox ── */
+        .stSelectbox div[data-baseweb="select"] > div {
+            background: rgba(13, 18, 32, 0.7) !important;
+            border-color: rgba(0, 255, 255, 0.25) !important;
+            border-radius: 8px !important;
+            backdrop-filter: blur(8px) !important;
+        }
+
+        /* ── Multiselect ── */
+        .stMultiSelect div[data-baseweb="select"] > div {
+            background: rgba(13, 18, 32, 0.7) !important;
+            border-color: rgba(0, 255, 255, 0.25) !important;
+            border-radius: 8px !important;
+        }
+
+        /* ── Slider ── */
+        [data-testid="stSlider"] > div > div > div {
+            background: rgba(0, 255, 255, 0.3) !important;
+        }
+        [data-testid="stSlider"] > div > div > div > div {
+            background: #00FFFF !important;
+            box-shadow: 0 0 8px rgba(0,255,255,0.6) !important;
+        }
+
+        /* ── Radio buttons ── */
         [data-testid="stRadio"] label {
             color: #E0F7FA !important;
         }
-        [data-testid="stSlider"] {
-            color: #00FFFF !important;
-        }
-        .stSelectbox div[data-baseweb="select"] > div {
-            background-color: #0D1220 !important;
-            border-color: rgba(0, 255, 255, 0.3) !important;
-        }
+
+        /* ── Dividers ── */
         hr {
-            border-color: rgba(0, 255, 255, 0.15) !important;
+            border-color: rgba(0, 255, 255, 0.12) !important;
         }
+
+        /* ── Download button ── */
         [data-testid="stDownloadButton"] > button {
-            border-color: rgba(0, 255, 255, 0.5) !important;
+            background: linear-gradient(135deg, rgba(0,255,255,0.1), rgba(0,180,255,0.07)) !important;
+            border-color: rgba(0, 255, 255, 0.45) !important;
             color: #00FFFF !important;
+            border-radius: 8px !important;
+            backdrop-filter: blur(8px) !important;
         }
+        [data-testid="stDownloadButton"] > button:hover {
+            box-shadow: 0 0 20px rgba(0,255,255,0.3) !important;
+            transform: translateY(-1px) !important;
+        }
+
+        /* ── Alert / info boxes ── */
         div[data-testid="stAlert"] {
-            background: rgba(0, 255, 255, 0.05) !important;
+            background: rgba(13, 18, 32, 0.6) !important;
             border-left-color: #00FFFF !important;
+            border-radius: 8px !important;
+            backdrop-filter: blur(12px) !important;
+        }
+
+        /* ── Spinner ── */
+        .stSpinner > div {
+            border-top-color: #00FFFF !important;
+        }
+
+        /* ── Tabs ── */
+        .stTabs [data-baseweb="tab-list"] {
+            background: rgba(10, 14, 26, 0.5) !important;
+            border-radius: 8px !important;
+            backdrop-filter: blur(8px) !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            color: rgba(0,255,255,0.6) !important;
+            letter-spacing: 2px !important;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #00FFFF !important;
+            border-bottom-color: #00FFFF !important;
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(10,14,26,0.5); }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0,255,255,0.3);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,255,255,0.5);
+        }
+
+        /* ── Scanline animation ── */
+        @keyframes scanline {
+            0%   { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0,255,255,0.06), transparent);
+            animation: scanline 8s linear infinite;
+            pointer-events: none;
+            z-index: 9999;
         }
         </style>
+        <div class="scanline"></div>
         """,
         unsafe_allow_html=True,
     )
