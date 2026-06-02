@@ -48,11 +48,9 @@ class AppConfigScoring(TypedDict):
     consistency_weight: float
     outlier_weight: float
 
-
 class AppConfigDetection(TypedDict):
     outlier_iqr_multiplier: float
     max_upload_mb: int
-
 
 class AppConfig(TypedDict):
     scoring: AppConfigScoring
@@ -65,7 +63,6 @@ class AppConfig(TypedDict):
 
 class AppConfigLoadError(Exception):
     pass
-
 
 class OrchestrationError(Exception):
     pass
@@ -98,7 +95,6 @@ def load_app_config() -> AppConfig:
     except Exception as e:
         raise AppConfigLoadError(f"Unexpected configuration load failure: {e}")
 
-
 _CONFIG: AppConfig = load_app_config()
 
 
@@ -113,6 +109,7 @@ def initialize_session_state() -> None:
             "username":      None,
             "user_name":     None,
             "raw_df":        None,
+            "current_iqr":   _CONFIG["detection"]["outlier_iqr_multiplier"], # <-- FIX: Added IQR to state
             "cleaned_df":    None,
             "selected_fixes": [],
             "profile":       None,
@@ -128,11 +125,10 @@ def initialize_session_state() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Profile enrichment — merges profiler + outlier + anomaly + duplicate data
-# into a single flat dict per column that scorer and cleaner both consume
+# Profile enrichment 
 # ---------------------------------------------------------------------------
 
-def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+def _build_enriched_profile(df: pd.DataFrame, iqr_multiplier: float) -> Dict[str, Dict[str, Any]]:
     try:
         raw_profile    = generate_profile(df)
         anomaly_report = run_duckdb_anomalies(df)
@@ -141,7 +137,7 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
 
         enriched: Dict[str, Dict[str, Any]] = {}
         for col_name, col_profile in raw_profile.items():
-            outlier_report = detect_outliers(df, col_name)
+            outlier_report = detect_outliers(df, col_name, iqr_multiplier=iqr_multiplier) # <-- FIX: Pass dynamic IQR
             mismatch_count = sum(
                 1 for m in anomaly_report.type_mismatches
                 if m.get("column") == col_name
@@ -161,8 +157,6 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
                 "lower_fence":        outlier_report.lower_fence,
                 "upper_fence":        outlier_report.upper_fence,
                 "mismatch_count":     mismatch_count,
-                # NEW — duplicate count wired into every column so scorer
-                # can apply the duplicate penalty correctly
                 "duplicate_count":    dup_report.count,
                 "total_rows":         total_rows,
             }
@@ -192,22 +186,24 @@ def _inject_neon_css() -> None:
             font-family: 'JetBrains Mono', monospace !important;
         }
 
-        /* ── Master background — deep neon space ── */
+        /* ── Master background — rich midnight with vivid glow orbs ── */
         .stApp {
             background:
-                radial-gradient(ellipse at 15% 40%, rgba(0,255,255,0.05) 0%, transparent 55%),
-                radial-gradient(ellipse at 85% 15%, rgba(0,180,255,0.06) 0%, transparent 50%),
-                radial-gradient(ellipse at 60% 80%, rgba(0,100,255,0.04) 0%, transparent 50%),
-                linear-gradient(160deg, #060A13 0%, #0A0E1A 45%, #0C1120 100%) !important;
+                radial-gradient(ellipse at 8%  30%, rgba(0,255,255,0.13)  0%, transparent 45%),
+                radial-gradient(ellipse at 92% 10%, rgba(80,0,255,0.18)   0%, transparent 40%),
+                radial-gradient(ellipse at 50% 85%, rgba(0,120,255,0.14)  0%, transparent 45%),
+                radial-gradient(ellipse at 75% 55%, rgba(120,0,255,0.10)  0%, transparent 40%),
+                radial-gradient(ellipse at 25% 70%, rgba(0,200,255,0.09)  0%, transparent 38%),
+                linear-gradient(145deg, #0D0D1F 0%, #111228 35%, #0E1530 65%, #0A1525 100%) !important;
         }
 
-        /* ── Sidebar — glassmorphism panel ── */
+        /* ── Sidebar — vivid glass over richer bg ── */
         section[data-testid="stSidebar"] {
-            background: rgba(10, 14, 26, 0.75) !important;
-            backdrop-filter: blur(20px) saturate(160%) !important;
-            -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
-            border-right: 1px solid rgba(0, 255, 255, 0.12) !important;
-            box-shadow: 4px 0 32px rgba(0, 0, 0, 0.5) !important;
+            background: rgba(14, 18, 38, 0.55) !important;
+            backdrop-filter: blur(28px) saturate(180%) brightness(1.1) !important;
+            -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.1) !important;
+            border-right: 1px solid rgba(0, 255, 255, 0.15) !important;
+            box-shadow: 4px 0 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(80,0,255,0.06) inset !important;
         }
 
         /* ── Typography ── */
@@ -221,26 +217,27 @@ def _inject_neon_css() -> None:
             color: #E0F7FA !important;
         }
 
-        /* ── Metric cards — glass ── */
+        /* ── Metric cards — vivid glass ── */
         [data-testid="stMetric"] {
-            background: rgba(13, 18, 32, 0.6) !important;
-            border: 1px solid rgba(0, 255, 255, 0.2) !important;
-            border-radius: 12px !important;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(0, 255, 255, 0.22) !important;
+            border-radius: 14px !important;
             padding: 20px !important;
-            backdrop-filter: blur(16px) saturate(150%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+            backdrop-filter: blur(20px) saturate(200%) brightness(1.15) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(200%) brightness(1.15) !important;
             box-shadow:
-                0 4px 24px rgba(0,0,0,0.4),
-                0 0 0 1px rgba(0,255,255,0.05) inset,
-                0 0 20px rgba(0,255,255,0.04) !important;
-            transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+                0 8px 32px rgba(0, 0, 0, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 1px 0 rgba(255,255,255,0.08) inset,
+                0 0 28px rgba(0, 255, 255, 0.06) !important;
+            transition: transform 0.25s ease, box-shadow 0.25s ease !important;
         }
         [data-testid="stMetric"]:hover {
-            transform: translateY(-2px) !important;
+            transform: translateY(-3px) !important;
             box-shadow:
-                0 8px 32px rgba(0,0,0,0.5),
-                0 0 0 1px rgba(0,255,255,0.1) inset,
-                0 0 28px rgba(0,255,255,0.08) !important;
+                0 12px 40px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(0, 255, 255, 0.15) inset,
+                0 0 36px rgba(0, 255, 255, 0.12) !important;
         }
         [data-testid="stMetricLabel"] {
             color: rgba(0, 255, 255, 0.65) !important;
@@ -304,14 +301,17 @@ def _inject_neon_css() -> None:
             overflow: hidden;
         }
 
-        /* ── Expander — glass card ── */
+        /* ── Expander — vivid glass card ── */
         .stExpander {
-            background: rgba(13, 18, 32, 0.55) !important;
+            background: rgba(255, 255, 255, 0.03) !important;
             border: 1px solid rgba(0, 255, 255, 0.18) !important;
-            border-radius: 12px !important;
-            backdrop-filter: blur(16px) saturate(140%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,255,255,0.04) inset !important;
+            border-radius: 14px !important;
+            backdrop-filter: blur(20px) saturate(180%) brightness(1.1) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.1) !important;
+            box-shadow:
+                0 4px 24px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(255,255,255,0.05) inset,
+                0 1px 0 rgba(255,255,255,0.06) inset !important;
         }
         .stExpander summary {
             color: #00FFFF !important;
@@ -490,7 +490,6 @@ def _render_landing() -> None:
 
 def main() -> None:
     try:
-        # FIX: duplicate page_icon and duplicate initial_sidebar_state args removed
         st.set_page_config(
             page_title="Data Quality Auditor",
             page_icon="🛡️",
@@ -500,44 +499,45 @@ def main() -> None:
 
         initialize_session_state()
 
-        # ===== AUTHENTICATION CHECK =====
-        # Must happen BEFORE _inject_neon_css() and BEFORE main UI rendering
         if not st.session_state.get("authenticated", False):
             render_login_page()
-            return  # Stop — don't render the main app until login succeeds
+            return  
 
-        # ===== MAIN APP STARTS HERE =====
         _inject_neon_css()
 
-        df: Optional[pd.DataFrame] = render_sidebar()
+        # EXPECTED: ui.sidebar.render_sidebar() should return (df, iqr_multiplier)
+        # We add a fallback just in case it's not updated yet
+        sidebar_output = render_sidebar()
+        if isinstance(sidebar_output, tuple) and len(sidebar_output) == 2:
+            active_df, current_iqr = sidebar_output
+        else:
+            active_df = sidebar_output
+            current_iqr = _CONFIG["detection"]["outlier_iqr_multiplier"]
 
-        # New file uploaded — reset all cached analysis so it re-runs cleanly
-        if df is not None:
-            st.session_state["raw_df"]       = df
-            # FIX: was reset twice (`cleaned_df = None` appeared on two consecutive
-            # lines). Now each key is set exactly once.
-            st.session_state["cleaned_df"]   = None
-            st.session_state["profile"]      = None
-            st.session_state["col_scores"]   = None
-            st.session_state["overall_score"] = None
-            st.session_state["issues"]       = None
+        # Cache Protection Logic <-- FIX: Prevent global wipe on button clicks
+        if active_df is not None:
+            previous_df = st.session_state.get("raw_df")
+            previous_iqr = st.session_state.get("current_iqr")
+            
+            if (previous_df is None or not active_df.equals(previous_df)) or (previous_iqr != current_iqr):
+                st.session_state["raw_df"] = active_df
+                st.session_state["current_iqr"] = current_iqr
+                st.session_state["cleaned_df"] = None
+                st.session_state["profile"] = None
+                st.session_state["col_scores"] = None
+                st.session_state["overall_score"] = None
+                st.session_state["issues"] = None
 
-        active_df: Optional[pd.DataFrame] = st.session_state.get("raw_df")
+        resolved_df: Optional[pd.DataFrame] = st.session_state.get("raw_df")
 
-        if active_df is None:
-            st.info(
-                "Awaiting data stream. Upload a CSV or load the bundled sample from the sidebar."
-            )
+        if resolved_df is None:
+            st.info("Awaiting data stream. Upload a CSV or load the bundled sample from the sidebar.")
             _render_landing()
             return
 
-        st.markdown(
-            "<h1 style='letter-spacing:6px;'>🛡 DATA QUALITY AUDITOR</h1>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<h1 style='letter-spacing:6px;'>🛡 DATA QUALITY AUDITOR</h1>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # ===== SIDEBAR USER INFO & LOGOUT =====
         with st.sidebar:
             st.markdown("---")
             username = st.session_state.get("username", "user")
@@ -567,13 +567,12 @@ def main() -> None:
             
             st.markdown("---")
 
-        # Run analysis once and cache in session state
         if st.session_state.get("profile") is None:
             with st.spinner("SCANNING DATA MATRIX..."):
-                profile      = _build_enriched_profile(active_df)
-                col_scores   = _build_column_scores(profile)
+                profile       = _build_enriched_profile(resolved_df, st.session_state["current_iqr"]) # <-- FIX: dynamic IQR
+                col_scores    = _build_column_scores(profile)
                 overall_score = score_dataframe(profile)
-                issues       = generate_issue_summary(profile)
+                issues        = generate_issue_summary(profile)
 
                 st.session_state["profile"]       = profile
                 st.session_state["col_scores"]    = col_scores
@@ -585,8 +584,7 @@ def main() -> None:
         overall_score: int                       = st.session_state["overall_score"]
         issues:        List[Any]                 = st.session_state["issues"]
 
-        # Duplicate report (lightweight — not cached, uses session iqr pref)
-        dup_report     = detect_duplicates(active_df)
+        dup_report      = detect_duplicates(resolved_df)
         duplicate_count = dup_report.count
 
         # --- Dashboard ---
@@ -607,7 +605,7 @@ def main() -> None:
         st.subheader("FEATURE AXIS DEEP-DIVE REPORTS")
         for col_name, stats in profile.items():
             c_score = col_scores.get(col_name, 0)
-            render_column_card(col_name, stats, c_score, active_df)
+            render_column_card(col_name, stats, c_score, resolved_df)
 
         # --- Remediation pipeline ---
         st.markdown("---")
@@ -616,17 +614,15 @@ def main() -> None:
         all_suggestions = suggest_fixes(
             profile,
             duplicate_count=duplicate_count,
-            source_df=active_df,
+            source_df=resolved_df,
         )
         render_suggestion_box(all_suggestions)
 
-        # FIX: two separate execute buttons existed (one from old code, one from new).
-        # Merged into a single button with change log feedback.
         if st.button("EXECUTE ALL FIXES", type="primary", key="execute_fixes_btn"):
             with st.spinner("APPLYING REMEDIATIONS..."):
-                cleaned = apply_fixes(active_df, [s.__dict__ for s in all_suggestions])
+                cleaned = apply_fixes(resolved_df, [s.__dict__ for s in all_suggestions])
                 st.session_state["cleaned_df"] = cleaned
-                change_log = generate_change_log(active_df, cleaned)
+                change_log = generate_change_log(resolved_df, cleaned)
                 st.success(
                     f"COMPLETE — {change_log.rows_dropped} rows dropped, "
                     f"{sum(change_log.mutations_applied.values())} values mutated."
@@ -635,7 +631,6 @@ def main() -> None:
         cleaned_df: Optional[pd.DataFrame] = st.session_state.get("cleaned_df")
         if cleaned_df is not None:
             csv_bytes = export_cleaned_csv(cleaned_df)
-            # FIX: duplicate label and duplicate type= args removed
             st.download_button(
                 label="⬇ DOWNLOAD CLEANED CSV",
                 data=csv_bytes,
@@ -651,7 +646,6 @@ def main() -> None:
         st.error(f"ORCHESTRATION FAULT: {e}")
     except Exception as e:
         st.error(f"UNHANDLED EXCEPTION: {e}")
-
 
 if __name__ == "__main__":
     main()
