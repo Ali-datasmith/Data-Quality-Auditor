@@ -1,52 +1,47 @@
 from typing import Dict, Tuple
 import hashlib
 
+
 # ---------------------------------------------------------------------------
-# Demo User Store (production: use real database)
+# Single User Store
 # ---------------------------------------------------------------------------
+
 USERS_DB: Dict[str, Dict[str, str]] = {
-    "admin": {
-        "name": "Admin User",
-        "password_hash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",  # "admin"
-    },
-    "demo": {
-        "name": "Demo User",
-        "password_hash": "ae2b1fca515949e5d54fb22b8ed95e7f5fa3d58dacc33e7993b8d1e932a61e91",  # "demo"
+    "Ali-datasmith": {
+        "name": "Ali Datasmith",
+        "password_hash": "9cab649e5d1529a9413a51dab1e4bf50eb6b39d06cfd44874c89aeb28d613b98",
     },
 }
 
+
 # ---------------------------------------------------------------------------
-# Simple hash function (SHA-256)
-# Production: use bcrypt.hashpw() instead
+# Hash + Validate
 # ---------------------------------------------------------------------------
+
 def hash_password(password: str) -> str:
-    """
-    Hash a plaintext password using SHA-256.
-    For production, replace with bcrypt.hashpw()
-    """
     return hashlib.sha256(password.encode()).hexdigest()
 
+
 def validate_credentials(username: str, password: str) -> Tuple[bool, str]:
-    """
-    Validate username and password.
-    
-    Returns:
-        (success: bool, message: str)
-    """
     if not username or not password:
         return False, "Username and password required."
-    
+
     if username not in USERS_DB:
-        return False, f"User '{username}' not found."
-    
-    user_record = USERS_DB[username]
-    password_hash = hash_password(password)
-    
-    if password_hash != user_record["password_hash"]:
-        return False, "Incorrect password."
-    
-    return True, f"Welcome, {user_record['name']}!"
+        return False, "Invalid credentials. Access denied."
+
+    if hash_password(password) != USERS_DB[username]["password_hash"]:
+        return False, "Invalid credentials. Access denied."
+
+    return True, f"Welcome back, {USERS_DB[username]['name']}!"
+
 
 def get_user_name(username: str) -> str:
-    """Get the display name of a user."""
     return USERS_DB.get(username, {}).get("name", username)
+
+
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+# Username : Ali-datasmith
+# Password : Qx9#mK2$vL7@nR4!
+# ---------------------------------------------------------------------------
