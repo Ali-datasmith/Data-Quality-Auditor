@@ -3,6 +3,7 @@ from credentials import validate_credentials
 
 
 def _inject_login_css() -> None:
+    """Injects custom dark neon CSS styling and glassmorphism structure."""
     st.markdown(
         """
         <style>
@@ -14,27 +15,39 @@ def _inject_login_css() -> None:
 
         /* ── Dark neon background ── */
         .stApp {
-            background: radial-gradient(ellipse at 20% 50%, rgba(0,255,255,0.04) 0%, transparent 60%),
-                        radial-gradient(ellipse at 80% 20%, rgba(0,200,255,0.05) 0%, transparent 50%),
-                        linear-gradient(160deg, #070B14 0%, #0A0E1A 40%, #0D1220 100%) !important;
+            background:
+                radial-gradient(ellipse at 8%  30%, rgba(0,255,255,0.13)  0%, transparent 45%),
+                radial-gradient(ellipse at 92% 10%, rgba(80,0,255,0.18)   0%, transparent 40%),
+                radial-gradient(ellipse at 50% 85%, rgba(0,120,255,0.14)  0%, transparent 45%),
+                radial-gradient(ellipse at 75% 55%, rgba(120,0,255,0.10)  0%, transparent 40%),
+                radial-gradient(ellipse at 25% 70%, rgba(0,200,255,0.09)  0%, transparent 38%),
+                linear-gradient(145deg, #0D0D1F 0%, #111228 35%, #0E1530 65%, #0A1525 100%) !important;
         }
 
         /* ── Hide Streamlit chrome ── */
         #MainMenu, footer, header { visibility: hidden !important; }
         .block-container { padding-top: 0 !important; }
 
-        /* ── Glassmorphism login card ── */
-        .login-glass-card {
-            background: rgba(13, 18, 32, 0.55) !important;
-            border: 1px solid rgba(0, 255, 255, 0.18) !important;
+        /* ── Native element alignment for glassmorphism layout ── */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(0, 255, 255, 0.20) !important;
             border-radius: 20px;
-            padding: 52px 44px 44px 44px;
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            padding: 44px !important;
+            backdrop-filter: blur(28px) saturate(200%) brightness(1.12);
+            -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.12);
             box-shadow:
-                0 8px 32px rgba(0, 0, 0, 0.5),
-                0 0 0 1px rgba(0,255,255,0.06) inset,
-                0 0 60px rgba(0, 255, 255, 0.05);
+                0 8px 40px rgba(0, 0, 0, 0.55),
+                0 0 0 1px rgba(255, 255, 255, 0.07) inset,
+                0 1px 0  rgba(255, 255, 255, 0.10) inset,
+                0 0 60px rgba(0, 255, 255, 0.07);
+        }
+
+        /* Remove native streamlit border styling around forms inside the card */
+        div[data-testid="stForm"] {
+            border: none !important;
+            padding: 0 !important;
+            background: transparent !important;
         }
 
         /* ── Logo / title area ── */
@@ -59,14 +72,14 @@ def _inject_login_css() -> None:
             font-size: 11px;
             letter-spacing: 4px;
             text-transform: uppercase;
-            margin-bottom: 44px;
+            margin-bottom: 30px;
         }
 
         /* ── Divider line ── */
         .login-divider {
             height: 1px;
             background: linear-gradient(90deg, transparent, rgba(0,255,255,0.3), transparent);
-            margin-bottom: 36px;
+            margin-bottom: 30px;
         }
 
         /* ── Input fields ── */
@@ -112,7 +125,7 @@ def _inject_login_css() -> None:
             border-radius: 8px !important;
             transition: all 0.3s ease !important;
             backdrop-filter: blur(8px);
-            margin-top: 8px !important;
+            margin-top: 18px !important;
         }
         .stButton > button:hover {
             background: linear-gradient(135deg, rgba(0,255,255,0.22), rgba(0,200,255,0.16)) !important;
@@ -128,6 +141,7 @@ def _inject_login_css() -> None:
         div[data-testid="stAlert"] {
             border-radius: 8px !important;
             backdrop-filter: blur(8px);
+            margin-top: 14px !important;
         }
 
         /* ── Footer ── */
@@ -163,53 +177,56 @@ def _inject_login_css() -> None:
 
 
 def render_login_page() -> bool:
+    """Renders the dark neon login screen and evaluates authentication flow.
+
+    Returns:
+        bool: True if authentication configuration passes, False otherwise.
+    """
     _inject_login_css()
 
     st.markdown("<div style='padding-top: 60px;'></div>", unsafe_allow_html=True)
 
-    _, col, _ = st.columns([1, 1.1, 1])
+    _, col, _ = st.columns([1, 1.2, 1])
 
     with col:
-        # Glass card wrapper — top section (decorative)
-        st.markdown(
-            """
-            <div class="login-glass-card">
+        # Utilize a border container to scope the stylized layout correctly
+        with st.container(border=True):
+            st.markdown(
+                """
                 <div class="login-icon">🔐</div>
                 <div class="login-title">AUDITOR</div>
                 <div class="login-subtitle">Secure Access Portal — Enterprise Edition</div>
                 <div class="login-divider"></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Streamlit form (must be outside raw HTML)
-        with st.form("login_form", clear_on_submit=False):
-            username = st.text_input(
-                "Username",
-                placeholder="Enter username",
-                key="login_username_field",
+                """,
+                unsafe_allow_html=True,
             )
-            password = st.text_input(
-                "Password",
-                type="password",
-                placeholder="Enter password",
-                key="login_password_field",
-            )
-            submitted = st.form_submit_button("🚀  AUTHENTICATE", type="primary")
 
-            if submitted:
-                is_valid, message = validate_credentials(username, password)
-                if is_valid:
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"]      = username
-                    st.session_state["user_name"]     = username.upper()
-                    st.success(message)
-                    st.balloons()
-                    st.rerun()
-                else:
-                    st.error(f"⛔  {message}")
-                    return False
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input(
+                    "Username",
+                    placeholder="Enter username",
+                    key="login_username_field",
+                )
+                password = st.text_input(
+                    "Password",
+                    type="password",
+                    placeholder="Enter password",
+                    key="login_password_field",
+                )
+                submitted = st.form_submit_button("🚀  AUTHENTICATE", type="primary")
+
+                if submitted:
+                    is_valid, message = validate_credentials(username, password)
+                    if is_valid:
+                        st.session_state["authenticated"] = True
+                        st.session_state["username"] = username
+                        st.session_state["user_name"] = username.upper()
+                        st.success(message)
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error(f"⛔  {message}")
+                        return False
 
         st.markdown(
             """
