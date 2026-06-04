@@ -68,7 +68,7 @@ _THEME: Dict[str, Any] = {
     "font":         {"family": "JetBrains Mono, monospace", "color": "#FAFAFA"},
     "paper_bgcolor": "rgba(0,0,0,0)",
     "plot_bgcolor":  "rgba(13,18,32,0.6)",
-    "margin":        {"l": 30, "r": 30, "t": 40, "b": 30},
+    "margin":       {"l": 30, "r": 30, "t": 40, "b": 30},
 }
 
 
@@ -205,16 +205,6 @@ def render_score_gauge(score: int) -> None:
                     yref="paper",
                 )
             ],
-        )
-
-        # Add custom styling to make it pop
-        fig.update_traces(
-            selector=dict(type="indicator"),
-            hoverlabel=dict(
-                bgcolor="rgba(13,18,32,0.9)",
-                bordercolor="#00FFFF",
-                font=dict(size=13, color="#00FFFF", family="JetBrains Mono"),
-            ),
         )
 
         st.plotly_chart(fig, use_container_width=True, config={"responsive": True, "displayModeBar": False})
