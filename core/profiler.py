@@ -200,7 +200,10 @@ def detect_duplicates(df: pd.DataFrame) -> DuplicateReport:
 def detect_outliers(df: pd.DataFrame, column: str) -> OutlierReport:
     try:
         col_series = df[column]
-        if not pd.api.types.is_numeric_dtype(col_series):
+
+        # Exclude non-numeric AND boolean columns — booleans pass is_numeric_dtype
+        # but numpy arithmetic (subtraction) fails on them
+        if not pd.api.types.is_numeric_dtype(col_series) or pd.api.types.is_bool_dtype(col_series):
             return OutlierReport(count=0, indices=[], lower_fence=0.0, upper_fence=0.0)
 
         clean_series = col_series.dropna()
@@ -243,12 +246,14 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
         if total_rows == 0:
             return AnomalyReport(null_columns=[], all_zero_columns=[], type_mismatches=[])
 
-        version_str = ctx.execute("SELECT version()").fetchone()[0]
+        # Detect DuckDB version to pick the correct regex function
+        version_str = ctx.execute("SELECT version()").fetchone()[0]  # e.g. "v0.10.3"
         try:
             major, minor = [int(x) for x in version_str.lstrip("v").split(".")[:2]]
         except Exception:
             major, minor = 0, 0
 
+        # regexp_full_match introduced in DuckDB 0.10; use REGEXP_MATCHES for older versions
         if (major, minor) >= (0, 10):
             regex_fn = "regexp_full_match"
         else:
@@ -276,7 +281,11 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                     zero_cols.append(col_name)
 
             if col_type in ("VARCHAR", "TEXT"):
-                numeric_pattern_query = f"SELECT COUNT(*) FROM df_view WHERE {escaped_col} IS NOT NULL AND TRY_CAST({escaped_col} AS DOUBLE) IS NOT NULL"
+                numeric_pattern_query = f"""
+                    SELECT COUNT(*) FROM df_view
+                    WHERE {escaped_col} IS NOT NULL
+                    AND TRY_CAST({escaped_col} AS DOUBLE) IS NOT NULL
+                """
                 num_pattern_cnt = ctx.execute(numeric_pattern_query).fetchone()
                 if num_pattern_cnt and num_pattern_cnt[0] > 0 and num_pattern_cnt[0] < total_rows:
                     mismatches.append({
@@ -288,7 +297,11 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                 if "email" in col_name.lower():
                     email_regex = r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
                     try:
-                        email_fail_query = f"SELECT COUNT(*) FROM df_view WHERE {escaped_col} IS NOT NULL AND NOT {regex_fn}({escaped_col}, '{email_regex}')"
+                        email_fail_query = f"""
+                            SELECT COUNT(*) FROM df_view
+                            WHERE {escaped_col} IS NOT NULL
+                            AND NOT {regex_fn}({escaped_col}, '{email_regex}')
+                        """
                         email_fail_cnt = ctx.execute(email_fail_query).fetchone()
                         if email_fail_cnt and email_fail_cnt[0] > 0:
                             mismatches.append({
@@ -297,10 +310,16 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                                 "affected_rows": int(email_fail_cnt[0])
                             })
                     except duckdb.Error:
+                        # Regex function unavailable — skip silently rather than returning 0
                         pass
 
                 if "date" in col_name.lower():
-                    date_fail_query = f"SELECT COUNT(*) FROM df_view WHERE {escaped_col} IS NOT NULL AND TRY_CAST({escaped_col} AS DATE) IS NULL AND TRY_CAST({escaped_col} AS TIMESTAMP) IS NULL"
+                    date_fail_query = f"""
+                        SELECT COUNT(*) FROM df_view
+                        WHERE {escaped_col} IS NOT NULL
+                        AND TRY_CAST({escaped_col} AS DATE) IS NULL
+                        AND TRY_CAST({escaped_col} AS TIMESTAMP) IS NULL
+                    """
                     date_fail_cnt = ctx.execute(date_fail_query).fetchone()
                     if date_fail_cnt and date_fail_cnt[0] > 0:
                         mismatches.append({
