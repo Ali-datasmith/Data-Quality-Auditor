@@ -436,12 +436,14 @@ Upper Fence = Q3 + 1.5 × IQR
 ## 📸 Screenshots
 
 ### Login Page
-[]
+[<img width="1365" height="719" alt="Screenshot 2026-06-05 11 05 31 AM" src="https://github.com/user-attachments/assets/95e5c2a2-ff89-4b99-9850-f043a71a40b4" />
+]
 
 *Enterprise authentication with glassmorphic design, neon cyan accents, and secure credential validation.*
 
 ### Main Dashboard
-[]
+[<img width="1365" height="726" alt="Screenshot 2026-06-05 11 07 25 AM" src="https://github.com/user-attachments/assets/5829f48b-c09c-413a-9e36-f38f5bd4ae5b" />
+]
 
 *Real-time quality score gauge, metric cards, and per-column breakdown with issue flags.*
 
@@ -451,7 +453,7 @@ Upper Fence = Q3 + 1.5 × IQR
 
 Watch the full walkthrough:
 
-[]
+[https://github.com/user-attachments/assets/14f9c4ca-523c-437f-85e7-422f4d19dcde]
 
 *Loom video showing: Login → Data Upload → Quality Analysis → Issue Detection → Data Cleaning → Export*
 
