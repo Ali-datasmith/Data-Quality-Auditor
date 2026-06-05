@@ -453,7 +453,7 @@ Upper Fence = Q3 + 1.5 × IQR
 
 Watch the full walkthrough:
 
-[https://github.com/user-attachments/assets/14f9c4ca-523c-437f-85e7-422f4d19dcde]
+[https://youtu.be/kGrs0EO9OjE]
 
 *Loom video showing: Login → Data Upload → Quality Analysis → Issue Detection → Data Cleaning → Export*
 
@@ -471,7 +471,7 @@ Found an issue? Open a GitHub issue with:
 ### Feature Requests
 Suggest improvements via:
 - GitHub Discussions
-- Email: `ali.datasmith@example.com`
+- Email: `rjptmhmmd@gmail.com`
 
 ### Development Setup
 ```bash
@@ -514,8 +514,7 @@ MIT License — See LICENSE file for details.
 
 **Contact:**
 - GitHub: [@Ali-datasmith](https://github.com/Ali-datasmith)
-- Email: ali.datasmith@example.com
-- Portfolio: [Your portfolio link]
+- Email: rjptmhmmd@example.com
 
 ---
 
@@ -531,12 +530,3 @@ MIT License — See LICENSE file for details.
 **⭐ If you find this useful, please star the repo!**
 
 **Made with ❤️ for data engineers & analysts worldwide.**
-
----
-
-### Quick Links
-- 📖 [Full Documentation](#)
-- 🐛 [Issue Tracker](#)
-- 💬 [Discussions](#)
-- 📺 [Tutorials](#)
-- 🎓 [Best Practices Guide](#)
