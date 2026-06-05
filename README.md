@@ -157,8 +157,8 @@ Whether you're a data engineer validating pipelines, a data analyst ensuring dat
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/Ali-datasmith/data-quality-auditor.git
-cd data-quality-auditor
+git clone https://github.com/Ali-datasmith/Data-Quality-Auditor.git
+cd Data-Quality-Auditor
 ```
 
 ### Step 2: Create Virtual Environment
@@ -178,13 +178,6 @@ pip install -r requirements.txt
 ```bash
 mkdir -p .streamlit data
 ```
-
-### Step 5: Run Application
-```bash
-streamlit run app.py
-```
-
-**App will launch at:** `http://localhost:8501`
 
 ---
 
@@ -475,8 +468,8 @@ Suggest improvements via:
 
 ### Development Setup
 ```bash
-git clone https://github.com/Ali-datasmith/data-quality-auditor.git
-cd data-quality-auditor
+git clone https://github.com/Ali-datasmith/Data-Quality-Auditor.git
+cd Data-Quality-Auditor
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 streamlit run app.py
