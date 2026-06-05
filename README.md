@@ -248,7 +248,7 @@ Quality Score =
 ## 📁 Project Structure
 
 ```
-data-quality-auditor/
+Data-Quality-Auditor/
 ├── app.py                      # Main Streamlit app
 ├── credentials.py              # User authentication
 ├── config.toml                 # Configuration (weights, thresholds)
