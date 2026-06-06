@@ -446,7 +446,7 @@ Upper Fence = Q3 + 1.5 × IQR
 
 Watch the full walkthrough:
 
-[https://youtu.be/kGrs0EO9OjE]
+[https://www.youtube.com/watch?v=vxaz9obO7jk]
 
 *Loom video showing: Login → Data Upload → Quality Analysis → Issue Detection → Data Cleaning → Export*
 
