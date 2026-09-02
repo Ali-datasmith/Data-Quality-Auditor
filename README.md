@@ -5,6 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
 [![Polars Engine](https://img.shields.io/badge/engine-Polars%20Lazy-FFD43B.svg)](https://pypolars.org/)
 [![Streamlit Cloud](https://img.shields.io/badge/Streamlit%20Cloud-Live%20Demo-FF4B4B.svg)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An enterprise-grade B2B Streamlit web application engineered for real-time automated data quality audits, anomaly detection, statistical profiling, and automated remediation pipelines. Powered by modern Python 3.12+ tooling, zero-copy Polars lazy execution, DuckDB SQL pattern checks, and Argon2 security authentication.
 
@@ -28,18 +29,36 @@ An enterprise-grade B2B Streamlit web application engineered for real-time autom
 
 ## 🏛️ System Architecture Workflow
 
+```mermaid
+graph TD
+    A[User CSV Stream / Ingestion] -->|pl.scan_csv / Lazy Evaluation| B[Polars Profiling Engine]
+    B --> C[DuckDB SQL Pattern Anomaly Detection]
+    B --> D[IQR Outlier Variance Bounds Calculation]
+    C --> E[Multi-Dimensional Quality Scorer]
+    D --> E
+    E --> F[Glassmorphic Streamlit Dashboard UI]
+    F --> G[Automated Lazy Remediation Pipeline]
+    G -->|sink_csv| H[Cleaned CSV Export]
 ```
-📁 Repository Root
- ├── app.py (Entry point with sys.path configuration)
- ├── credentials.py
- ├── config.toml
- ├── runtime.txt (Python 3.12 specification)
+
+---
+
+## 📂 Repository Directory Layout
+
+```
+📁 Data-Quality-Auditor
+ ├── app.py                   # Streamlit entry point (configures sys.path)
+ ├── credentials.py           # Argon2id authentication & recruiter bypass
+ ├── config.toml              # Scoring weights & detection parameters
+ ├── runtime.txt              # Python 3.12 environment specification
+ ├── pyproject.toml           # Ruff & Pytest configuration
+ ├── requirements.txt         # Production dependencies
  ├── src/
- │    ├── core/      (Profiler, Scorer, DuckDB Anomaly Engine)
- │    ├── ui/        (Dashboard, Glassmorphic Login, Charts, Report Cards)
- │    └── utils/     (Polars Lazy Remediation & Cleaner)
- ├── data/
- └── tests/
+ │    ├── core/               # Statistical profiler, scorer & DuckDB anomaly engine
+ │    ├── ui/                 # Glassmorphic UI dashboard, charts, report cards, sidebar
+ │    └── utils/              # Polars lazy data cleaner & remediation exporter
+ ├── data/                    # Sample messy dataset
+ └── tests/                   # Pytest automated test suite
 ```
 
 ---
@@ -105,6 +124,6 @@ This repository is optimized for deployment on **Streamlit Community Cloud**:
 
 ---
 
-## 📄 License & Credits
+## 📜 License
 
-Developed by **Ali Datasmith**. Enterprise B2B Streamlit Data Quality Architecture.
+This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.

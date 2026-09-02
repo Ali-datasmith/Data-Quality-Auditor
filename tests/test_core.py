@@ -2,6 +2,7 @@ import pandas as pd
 import polars as pl
 import pytest
 
+from app import _build_enriched_profile
 from core.profiler import (
     detect_duplicates,
     detect_outliers,
@@ -48,6 +49,39 @@ def test_get_user_name() -> None:
 
 
 # ============================================================================
+# Edge Cases & Audit Tests
+# ============================================================================
+
+def test_empty_dataframe_profiling() -> None:
+    empty_df = pd.DataFrame(columns=["a", "b"])
+    profile = generate_profile(empty_df)
+    assert "a" in profile
+    assert profile["a"].missing_count == 0
+    assert profile["a"].missing_percentage == 0.0
+
+    enriched = _build_enriched_profile(empty_df)
+    assert score_dataframe(enriched) == 80
+
+
+def test_all_null_dataframe_profiling() -> None:
+    null_df = pd.DataFrame({"col_null": [None, None, None]})
+    profile = generate_profile(null_df)
+    assert profile["col_null"].missing_count == 3
+    assert profile["col_null"].missing_percentage == 100.0
+
+
+def test_iqr_outlier_calculation_bounds() -> None:
+    # Distribution with known q25=3.0, q75=8.0, iqr=5.0
+    # lower_fence = 3 - 1.5*5 = -4.5, upper_fence = 8 + 1.5*5 = 15.5
+    df = pd.DataFrame({"vals": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 100.0]})
+    report = detect_outliers(df, "vals")
+    assert report.count == 1
+    assert report.upper_fence == 15.5
+    assert report.lower_fence == -4.5
+    assert 9 in report.indices
+
+
+# ============================================================================
 # Profiler & Polars Lazy Tests
 # ============================================================================
 
@@ -67,11 +101,10 @@ def test_generate_profile_lazy(sample_df: pd.DataFrame) -> None:
 
     num_p = profile["num_col"]
     assert num_p.missing_count == 1
-    assert num_p.unique_count == 5  # 10.0, 12.0, 11.0, 100.0, Null
+    assert num_p.unique_count == 5
 
 
 def test_detect_duplicates_lazy(sample_df: pd.DataFrame) -> None:
-    # Row 0 and Row 5 are identical: (10.0, 'alpha', True)
     dup_report = detect_duplicates(sample_df)
     assert dup_report.count == 1
     assert 5 in dup_report.indices
@@ -80,7 +113,7 @@ def test_detect_duplicates_lazy(sample_df: pd.DataFrame) -> None:
 def test_detect_outliers_lazy(sample_df: pd.DataFrame) -> None:
     outlier_report = detect_outliers(sample_df, "num_col")
     assert outlier_report.count == 1
-    assert 3 in outlier_report.indices  # value 100.0 at index 3
+    assert 3 in outlier_report.indices
 
 
 def test_detect_outliers_boolean_column(sample_df: pd.DataFrame) -> None:
@@ -129,19 +162,8 @@ def test_score_column_string_no_outlier_penalty() -> None:
 
 
 def test_score_dataframe(sample_df: pd.DataFrame) -> None:
-    profile = generate_profile(sample_df)
-    col_stats_dict = {}
-    for col, p in profile.items():
-        col_stats_dict[col] = {
-            "total_rows": len(sample_df),
-            "dtype": p.dtype,
-            "missing_count": p.missing_count,
-            "unique_count": p.unique_count,
-            "outlier_count": 0,
-            "mismatch_count": 0,
-            "duplicate_count": 0,
-        }
-    overall = score_dataframe(col_stats_dict)
+    enriched = _build_enriched_profile(sample_df)
+    overall = score_dataframe(enriched)
     assert 0 <= overall <= 100
 
 

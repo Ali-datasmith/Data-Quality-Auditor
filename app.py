@@ -535,7 +535,7 @@ def main() -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button("🚪 LOGOUT", key="logout_btn", use_container_width=True):
+            if st.button("🚪 LOGOUT", key="logout_btn", width="stretch"):
                 st.session_state["authenticated"] = False
                 st.session_state["username"]      = None
                 st.session_state["user_name"]     = None

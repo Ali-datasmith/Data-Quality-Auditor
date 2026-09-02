@@ -122,7 +122,7 @@ def render_column_card(
                     st.dataframe(
                         pd.DataFrame(distribution_records),
                         hide_index=True,
-                        use_container_width=True
+                        width="stretch"
                     )
 
             with v_col2:
@@ -157,7 +157,7 @@ def render_suggestion_box(suggestions: list[Any]) -> None:
 
         st.dataframe(
             pd.DataFrame(display_records),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 

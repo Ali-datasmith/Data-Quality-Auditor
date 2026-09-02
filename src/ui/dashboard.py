@@ -196,7 +196,7 @@ def render_score_gauge(score: int) -> None:
             ],
         )
 
-        st.plotly_chart(fig, use_container_width=True, config={"responsive": True, "displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", config={"responsive": True, "displayModeBar": False})
 
     except Exception as e:
         raise DashboardRenderingError(
@@ -238,7 +238,7 @@ def render_column_table(
 
         st.dataframe(
             summary_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Score": st.column_config.ProgressColumn(

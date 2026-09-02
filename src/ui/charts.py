@@ -119,7 +119,7 @@ def render_distribution_histogram(df: pd.DataFrame, column: str) -> None:
             annotation_text="Upper Outliers" if float(clean_series.max()) > float(upper_fence) else "",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     except KeyError as e:
         raise ChartRenderingError(f"Target distribution feature dimension index missing: {e}")
     except Exception as e:
@@ -153,7 +153,7 @@ def render_missing_heatmap(df: pd.DataFrame) -> None:
             xaxis={"tickangle": -45},
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     except Exception as e:
         raise ChartRenderingError(f"Failure assembling missing trace heat density mapping: {e}")
 
@@ -190,7 +190,7 @@ def render_duplicate_scatter(df: pd.DataFrame, dup_indices: list[int]) -> None:
             legend_title_text="Audit Category",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     except Exception as e:
         raise ChartRenderingError(f"Failure projecting multidimensional row duplicity coordinates: {e}")
 
@@ -230,6 +230,6 @@ def render_score_bar_chart(column_scores: dict[str, int]) -> None:
             xaxis={"range": [0, 105], "title": "Calculated Structural Index Metrics Baseline"},
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     except Exception as e:
         raise ChartRenderingError(f"Failure rendering dimensional data metrics bar breakdown: {e}")
