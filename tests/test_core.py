@@ -1,28 +1,24 @@
-from pathlib import Path
 import pandas as pd
 import polars as pl
 import pytest
 
-from credentials import hash_password, validate_credentials, get_user_name
 from core.profiler import (
-    generate_profile,
     detect_duplicates,
     detect_outliers,
+    generate_profile,
     run_duckdb_anomalies,
 )
 from core.scorer import (
+    get_score_label,
     score_column,
     score_dataframe,
-    get_score_label,
-    generate_issue_summary,
 )
+from credentials import get_user_name, validate_credentials
 from utils.cleaner import (
-    suggest_fixes,
     apply_fixes,
     apply_fixes_lazy,
     generate_change_log,
 )
-
 
 # ============================================================================
 # Auth Tests

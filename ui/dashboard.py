@@ -2,11 +2,13 @@
 
 from pathlib import Path
 from typing import Any, TypedDict
-import tomllib
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from core.scorer import get_score_label, QualityIssue
+import tomllib
+
+from core.scorer import QualityIssue, get_score_label
 
 
 class UIDashboardConfigScoring(TypedDict):

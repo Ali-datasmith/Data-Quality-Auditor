@@ -2,10 +2,10 @@
 
 from pathlib import Path
 from typing import TypedDict
-import tomllib
+
 import pandas as pd
 import streamlit as st
-
+import tomllib
 
 # ---------------------------------------------------------------------------
 # Config TypedDicts

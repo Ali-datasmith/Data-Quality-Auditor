@@ -2,12 +2,14 @@
 
 from pathlib import Path
 from typing import Any, TypedDict
-import tomllib
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import tomllib
+
 
 class UIChartsConfigScoring(TypedDict):
     completeness_weight: float

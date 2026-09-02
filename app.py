@@ -1,42 +1,41 @@
 # app.py
 
-import tomllib
 from pathlib import Path
 from typing import Any, TypedDict
 
 import pandas as pd
 import streamlit as st
+import tomllib
 
 # ---------------------------------------------------------------------------
 # Imports — cleaned: each module imported exactly once with the full set
 # ---------------------------------------------------------------------------
 from core.profiler import (
-    generate_profile,
     detect_duplicates,
     detect_outliers,
+    generate_profile,
     run_duckdb_anomalies,
 )
 from core.scorer import (
+    generate_issue_summary,
     score_column,
     score_dataframe,
-    generate_issue_summary,
 )
-from ui.sidebar import render_sidebar
 from ui.dashboard import (
-    render_overview_metrics,
-    render_score_gauge,
     render_column_table,
     render_issue_list,
+    render_overview_metrics,
+    render_score_gauge,
 )
-from ui.report_card import render_column_card, render_suggestion_box
 from ui.login import render_login_page
+from ui.report_card import render_column_card, render_suggestion_box
+from ui.sidebar import render_sidebar
 from utils.cleaner import (
-    suggest_fixes,
     apply_fixes,
     export_cleaned_csv,
     generate_change_log,
+    suggest_fixes,
 )
-
 
 # ---------------------------------------------------------------------------
 # Config TypedDicts

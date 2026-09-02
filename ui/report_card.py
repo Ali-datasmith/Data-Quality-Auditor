@@ -2,9 +2,11 @@
 
 from pathlib import Path
 from typing import Any, TypedDict
-import tomllib
+
 import pandas as pd
 import streamlit as st
+import tomllib
+
 from core.scorer import get_score_label
 from ui.charts import render_distribution_histogram
 
