@@ -88,7 +88,8 @@ class AnomalyReport:
 
 def load_config() -> AppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        # Resolve config.toml at repo root (two levels up from src/core/profiler.py)
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:

@@ -80,7 +80,8 @@ class DatasetSummary:
 
 def load_scoring_config() -> ScorerAppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        # Resolve config.toml at repo root (two levels up from src/core/scorer.py)
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:

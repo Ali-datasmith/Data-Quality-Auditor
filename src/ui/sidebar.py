@@ -54,7 +54,7 @@ class SidebarRenderingError(UISidebarException):
 
 def load_ui_sidebar_config() -> UISidebarAppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:
@@ -86,7 +86,7 @@ _DEFAULT_IQR: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
 @st.cache_data
 def load_sample_dataset() -> pd.DataFrame:
     try:
-        sample_path = Path(__file__).resolve().parents[1] / "data" / "sample_messy.csv"
+        sample_path = Path(__file__).resolve().parents[2] / "data" / "sample_messy.csv"
         if not sample_path.exists():
             raise FileNotFoundError(f"Bundled sample dataset missing at: {sample_path}")
         return pd.read_csv(sample_path)

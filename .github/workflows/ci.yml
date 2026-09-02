@@ -32,7 +32,7 @@ jobs:
 
       - name: Run Mypy Type Checker
         run: |
-          mypy --ignore-missing-imports app.py credentials.py core/ utils/ ui/ tests/
+          mypy --ignore-missing-imports app.py credentials.py src/ tests/
 
       - name: Run Pytest Suite
         run: |

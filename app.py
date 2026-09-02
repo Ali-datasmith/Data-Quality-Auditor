@@ -1,14 +1,21 @@
 # app.py
 
+import sys
 from pathlib import Path
 from typing import Any, TypedDict
 
-import pandas as pd
-import streamlit as st
 import tomllib
 
+# Add 'src' directory to Python path so modules are treated as packages
+_SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
+import pandas as pd
+import streamlit as st
+
 # ---------------------------------------------------------------------------
-# Imports — cleaned: each module imported exactly once with the full set
+# Imports — from src/ modules
 # ---------------------------------------------------------------------------
 from core.profiler import (
     detect_duplicates,

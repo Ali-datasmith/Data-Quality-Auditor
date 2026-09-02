@@ -118,7 +118,7 @@ def apply_fixes(
         lf = pl.from_pandas(df).lazy()
         cleaned_lf = apply_fixes_lazy(lf, fixes)
         return cleaned_lf.collect().to_pandas()
-    
+
     lf = df.lazy()
     cleaned_lf = apply_fixes_lazy(lf, fixes)
     return cleaned_lf.collect().to_pandas()

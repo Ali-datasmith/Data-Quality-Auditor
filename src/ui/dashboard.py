@@ -42,7 +42,7 @@ class DashboardRenderingError(UIDashboardException):
 
 def load_ui_dashboard_config() -> UIDashboardAppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:

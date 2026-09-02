@@ -12,6 +12,7 @@ An enterprise-grade B2B Streamlit web application engineered for real-time autom
 
 ## 🌟 Key Architecture & Highlights
 
+* **📁 Clean `src/` Directory Layout:** Structured for enterprise maintainability with modular subpackages (`src/core/`, `src/ui/`, `src/utils/`) dynamically linked via top-level `sys.path`.
 * **⚡ Zero-Copy High-Performance Engine:** Built entirely on **Polars Lazy Evaluation** (`pl.scan_csv`, `pl.LazyFrame`, `.lazy()`) to eliminate memory bottlenecks and support streaming pipeline execution.
 * **🔐 Enterprise Argon2 Authentication:** Hashing and credential validation powered by `argon2-cffi` (`Argon2id`), featuring a dedicated **1-Click Recruiter Demo Bypass** for friction-free evaluation.
 * **📊 Multi-Dimensional Quality Scoring (0–100):** Weighted algorithmic scoring model assessing:
@@ -28,28 +29,17 @@ An enterprise-grade B2B Streamlit web application engineered for real-time autom
 ## 🏛️ System Architecture Workflow
 
 ```
-┌─────────────────────────┐
-│     User CSV Stream     │
-└────────────┬────────────┘
-             │ (pl.scan_csv / Lazy Processing)
-             ▼
-┌─────────────────────────┐      ┌──────────────────────────┐
-│  Polars Profiling Engine │ ───► │ DuckDB SQL Anomaly Check │
-└────────────┬────────────┘      └────────────┬─────────────┘
-             │                                │
-             └────────────────┬───────────────┘
-                              │
-                              ▼
-               ┌─────────────────────────────┐
-               │  Multi-Dimensional Scorer    │
-               │ (0-100 Quality Index Model) │
-               └──────────────┬──────────────┘
-                              │
-                              ▼
-               ┌─────────────────────────────┐
-               │ Streamlit Glassmorphic UI   │
-               │  & Auto-Remediation Engine  │
-               └─────────────────────────────┘
+📁 Repository Root
+ ├── app.py (Entry point with sys.path configuration)
+ ├── credentials.py
+ ├── config.toml
+ ├── runtime.txt (Python 3.12 specification)
+ ├── src/
+ │    ├── core/      (Profiler, Scorer, DuckDB Anomaly Engine)
+ │    ├── ui/        (Dashboard, Glassmorphic Login, Charts, Report Cards)
+ │    └── utils/     (Polars Lazy Remediation & Cleaner)
+ ├── data/
+ └── tests/
 ```
 
 ---
@@ -99,7 +89,7 @@ python -m pytest
 ruff check .
 
 # Run Mypy static type checker
-mypy --ignore-missing-imports app.py credentials.py core/ utils/ ui/ tests/
+mypy --ignore-missing-imports app.py credentials.py src/ tests/
 ```
 
 ---
@@ -110,7 +100,8 @@ This repository is optimized for deployment on **Streamlit Community Cloud**:
 1. Fork or push this repository to GitHub.
 2. Connect your repository to Streamlit Community Cloud.
 3. Set the main file path to `app.py`.
-4. Deploy! All dependencies are specified in `requirements.txt`.
+4. Streamlit will recognize `runtime.txt` and install packages from `requirements.txt`.
+5. Deploy!
 
 ---
 

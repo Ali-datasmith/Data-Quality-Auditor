@@ -42,7 +42,7 @@ class ComponentRenderingError(UIReportCardException):
 
 def load_ui_report_card_config() -> UIReportCardAppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:
