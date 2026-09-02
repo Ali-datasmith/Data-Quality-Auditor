@@ -1,7 +1,7 @@
 # ui/report_card.py
 
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 import tomllib
 import pandas as pd
 import streamlit as st
@@ -58,22 +58,14 @@ def load_ui_report_card_config() -> UIReportCardAppConfig:
         }
     except tomllib.TOMLDecodeError as e:
         raise UIReportCardConfigLoadError(f"Corrupted TOML syntax format parameters: {e}")
-    except Exception as e:
-        raise UIReportCardConfigLoadError(f"Unexpected file operations context error: {e}")
 
 
 _CONFIG: UIReportCardAppConfig = load_ui_report_card_config()
 
 
-# ---------------------------------------------------------------------------
-# render_column_card
-# FIX: Added boolean column check before rendering distribution histogram
-#      Booleans pass is_numeric_dtype() but fail on variance/std calculations
-# ---------------------------------------------------------------------------
-
 def render_column_card(
     col_name: str,
-    col_stats: Dict[str, Any],
+    col_stats: dict[str, Any],
     col_score: int,
     df: pd.DataFrame,
 ) -> None:
@@ -117,7 +109,7 @@ def render_column_card(
 
             with v_col1:
                 st.markdown("### Top Values")
-                top_values_list: List[Dict[str, Any]] = col_stats.get("top_values", [])
+                top_values_list: list[dict[str, Any]] = col_stats.get("top_values", [])
                 if not top_values_list:
                     st.info("No values to display.")
                 else:
@@ -133,8 +125,6 @@ def render_column_card(
 
             with v_col2:
                 st.markdown("### Distribution")
-                # FIX: Check for boolean columns — they pass is_numeric_dtype() 
-                # but fail on variance calculations in the histogram renderer
                 if pd.api.types.is_numeric_dtype(df[col_name]) and not pd.api.types.is_bool_dtype(df[col_name]):
                     render_distribution_histogram(df, col_name)
                 else:
@@ -146,7 +136,7 @@ def render_column_card(
         raise ComponentRenderingError(f"Failed to generate UI card component tracking architecture metrics: {e}")
 
 
-def render_suggestion_box(suggestions: List[Any]) -> None:
+def render_suggestion_box(suggestions: list[Any]) -> None:
     try:
         st.markdown("### Suggested Remediations")
 
@@ -154,7 +144,7 @@ def render_suggestion_box(suggestions: List[Any]) -> None:
             st.success("No critical issues. Dataset is clean.")
             return
 
-        display_records: List[Dict[str, Any]] = []
+        display_records: list[dict[str, Any]] = []
         for sug in suggestions:
             display_records.append({
                 "Column":   sug.column if hasattr(sug, "column") else sug.get("column", ""),

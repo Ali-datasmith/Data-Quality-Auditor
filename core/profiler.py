@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict, Union
-import tomllib
+from typing import Any, TypedDict
+
+import duckdb
 import numpy as np
 import pandas as pd
 import polars as pl
-import duckdb
+import tomllib
 
 
 class ConfigScoring(TypedDict):
@@ -59,30 +60,30 @@ class ColumnProfile:
     unique_count: int
     min_value: Any
     max_value: Any
-    mean_value: Union[float, None]
-    std_value: Union[float, None]
-    top_values: List[Dict[str, Any]]
+    mean_value: float | None
+    std_value: float | None
+    top_values: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
 class DuplicateReport:
     count: int
-    indices: List[int]
+    indices: list[int]
 
 
 @dataclass(frozen=True)
 class OutlierReport:
     count: int
-    indices: List[int]
+    indices: list[int]
     lower_fence: float
     upper_fence: float
 
 
 @dataclass(frozen=True)
 class AnomalyReport:
-    null_columns: List[str]
-    all_zero_columns: List[str]
-    type_mismatches: List[Dict[str, Any]]
+    null_columns: list[str]
+    all_zero_columns: list[str]
+    type_mismatches: list[dict[str, Any]]
 
 
 def load_config() -> AppConfig:
@@ -96,12 +97,12 @@ def load_config() -> AppConfig:
                 "completeness_weight": 0.3,
                 "uniqueness_weight": 0.2,
                 "consistency_weight": 0.3,
-                "outlier_weight": 0.2
+                "outlier_weight": 0.2,
             },
             "detection": {
                 "outlier_iqr_multiplier": 1.5,
-                "max_upload_mb": 200
-            }
+                "max_upload_mb": 200,
+            },
         }
     except tomllib.TOMLDecodeError as e:
         raise ProfilerError(f"Invalid TOML in configuration file: {e}")
@@ -111,60 +112,117 @@ _CONFIG: AppConfig = load_config()
 _IQR_MULTIPLIER: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
 
 
-def load_file(path: Path) -> pd.DataFrame:
+def scan_file_lazy(path: Path | str) -> pl.LazyFrame:
+    """Scans a CSV lazily using Polars pl.scan_csv for zero-copy memory optimization."""
     try:
-        lf = pl.scan_csv(path, infer_schema_length=10000, try_parse_dates=True)
-        df_pl = lf.collect()
-        return df_pl.to_pandas()
-    except pl.exceptions.ComputeError as e:
-        raise FileLoadError(f"Polars failed to parse or scan the CSV: {e}")
-    except FileNotFoundError as e:
-        raise FileLoadError(f"Target CSV file not found at path: {e}")
+        return pl.scan_csv(path, infer_schema_length=10000, try_parse_dates=True)
+    except Exception as e:
+        raise FileLoadError(f"Polars failed to scan CSV lazily: {e}")
+
+
+def load_file(path: Path | str) -> pd.DataFrame:
+    try:
+        lf = scan_file_lazy(path)
+        return lf.collect().to_pandas()
     except Exception as e:
         raise FileLoadError(f"Unexpected error loading file: {e}")
 
 
-def generate_profile(df: pd.DataFrame) -> Dict[str, ColumnProfile]:
+def _get_lazyframe(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> pl.LazyFrame:
+    """Helper to ensure input data is converted to a Polars LazyFrame."""
+    if isinstance(df_or_lf, pl.LazyFrame):
+        return df_or_lf
+    if isinstance(df_or_lf, pl.DataFrame):
+        return df_or_lf.lazy()
+    if isinstance(df_or_lf, pd.DataFrame):
+        return pl.from_pandas(df_or_lf).lazy()
+    raise ProfileGenerationError(f"Unsupported data structure type: {type(df_or_lf)}")
+
+
+def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> dict[str, ColumnProfile]:
     try:
-        profile_results: Dict[str, ColumnProfile] = {}
-        total_rows = len(df)
+        lf = _get_lazyframe(df_or_lf)
+        schema = lf.collect_schema()
 
-        for column in df.columns:
-            col_series = df[column]
-            missing_cnt = int(col_series.isna().sum())
+        # Calculate total row count lazily
+        total_rows = lf.select(pl.len()).collect().item()
+
+        profile_results: dict[str, ColumnProfile] = {}
+
+        if total_rows == 0:
+            for col, dtype in schema.items():
+                profile_results[str(col)] = ColumnProfile(
+                    dtype=str(dtype),
+                    missing_count=0,
+                    missing_percentage=0.0,
+                    unique_count=0,
+                    min_value=None,
+                    max_value=None,
+                    mean_value=None,
+                    std_value=None,
+                    top_values=[],
+                )
+            return profile_results
+
+        # Aggregate missing count, n_unique, min, max, mean, std lazily across all columns
+        agg_exprs = []
+        for col, dtype in schema.items():
+            agg_exprs.extend([
+                pl.col(col).null_count().alias(f"{col}__null_count"),
+                pl.col(col).n_unique().alias(f"{col}__n_unique"),
+                pl.col(col).min().alias(f"{col}__min"),
+                pl.col(col).max().alias(f"{col}__max"),
+            ])
+            if dtype.is_numeric():
+                agg_exprs.extend([
+                    pl.col(col).mean().alias(f"{col}__mean"),
+                    pl.col(col).std().alias(f"{col}__std"),
+                ])
+
+        metrics_df = lf.select(agg_exprs).collect()
+
+        for col, dtype in schema.items():
+            missing_cnt = int(metrics_df[f"{col}__null_count"].item())
             missing_pct = float((missing_cnt / total_rows) * 100) if total_rows > 0 else 0.0
+            unique_cnt = int(metrics_df[f"{col}__n_unique"].item())
 
+            # Top 5 value counts using Polars lazy execution
             try:
-                unique_cnt = int(col_series.nunique(dropna=True))
-            except Exception:
-                unique_cnt = int(col_series.astype(str).nunique())
-
-            try:
-                top_vc = col_series.value_counts(dropna=True).head(5)
-                top_vals = [{"value": str(k), "count": int(v)} for k, v in top_vc.items()]
+                top_df = (
+                    lf.select(pl.col(col))
+                    .drop_nulls()
+                    .group_by(col)
+                    .len()
+                    .sort("len", descending=True)
+                    .limit(5)
+                    .collect()
+                )
+                top_vals = [
+                    {"value": str(row[0]), "count": int(row[1])}
+                    for row in top_df.iter_rows()
+                ]
             except Exception:
                 top_vals = []
 
-            if pd.api.types.is_numeric_dtype(col_series):
-                valid_num = col_series.dropna()
-                min_v = float(valid_num.min()) if not valid_num.empty else None
-                max_v = float(valid_num.max()) if not valid_num.empty else None
-                mean_v = float(valid_num.mean()) if not valid_num.empty else None
-                std_v = float(valid_num.std()) if not valid_num.empty and len(valid_num) > 1 else None
-            elif pd.api.types.is_datetime64_any_dtype(col_series):
-                min_v = str(col_series.min()) if col_series.notna().any() else None
-                max_v = str(col_series.max()) if col_series.notna().any() else None
-                mean_v = None
-                std_v = None
-            else:
-                valid_str = col_series.dropna().astype(str)
-                min_v = str(valid_str.min()) if not valid_str.empty else None
-                max_v = str(valid_str.max()) if not valid_str.empty else None
-                mean_v = None
-                std_v = None
+            min_v = metrics_df[f"{col}__min"].item()
+            max_v = metrics_df[f"{col}__max"].item()
 
-            profile_results[str(column)] = ColumnProfile(
-                dtype=str(col_series.dtype),
+            if dtype.is_numeric():
+                mean_v_raw = metrics_df[f"{col}__mean"].item()
+                std_v_raw = metrics_df[f"{col}__std"].item()
+
+                mean_v = float(mean_v_raw) if mean_v_raw is not None and not np.isnan(mean_v_raw) else None
+                std_v = float(std_v_raw) if std_v_raw is not None and not np.isnan(std_v_raw) else None
+                min_v = float(min_v) if min_v is not None and not np.isnan(min_v) else None
+                max_v = float(max_v) if max_v is not None and not np.isnan(max_v) else None
+            else:
+                mean_v = None
+                std_v = None
+                min_v = str(min_v) if min_v is not None else None
+                max_v = str(max_v) if max_v is not None else None
+
+            profile_results[str(col)] = ColumnProfile(
+                dtype=str(dtype),
                 missing_count=missing_cnt,
                 missing_percentage=missing_pct,
                 unique_count=unique_cnt,
@@ -172,92 +230,121 @@ def generate_profile(df: pd.DataFrame) -> Dict[str, ColumnProfile]:
                 max_value=max_v,
                 mean_value=mean_v,
                 std_value=std_v,
-                top_values=top_vals
+                top_values=top_vals,
             )
+
         return profile_results
-    except KeyError as e:
-        raise ProfileGenerationError(f"Column axis mapping failed: {e}")
-    except TypeError as e:
-        raise ProfileGenerationError(f"Type error during stats aggregation: {e}")
     except Exception as e:
         raise ProfileGenerationError(f"Failed to generate dataframe profile: {e}")
 
 
-def detect_duplicates(df: pd.DataFrame) -> DuplicateReport:
+def detect_duplicates(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, subset: list[str] | None = None) -> DuplicateReport:
     try:
-        duplicate_mask = df.duplicated(keep="first")
-        duplicate_indices = df.index[duplicate_mask].tolist()
-        return DuplicateReport(
-            count=int(duplicate_mask.sum()),
-            indices=[int(idx) for idx in duplicate_indices]
+        lf = _get_lazyframe(df_or_lf)
+
+        # Attach row index lazily and find duplicate rows
+        indexed_lf = lf.with_row_index("__row_id__")
+
+        cols = subset if subset else [c for c in lf.collect_schema().names()]
+        if not cols:
+            return DuplicateReport(count=0, indices=[])
+
+        # Filter duplicates where count > 1 and row_id != first row_id in group
+        dup_indices_df = (
+            indexed_lf.with_columns(
+                pl.int_range(0, pl.len()).over(cols).alias("__dup_rank__")
+            )
+            .filter(pl.col("__dup_rank__") > 0)
+            .select("__row_id__")
+            .collect()
         )
-    except ValueError as e:
-        raise DuplicateDetectionError(f"Dataframe structure error in duplication check: {e}")
+
+        indices = [int(x) for x in dup_indices_df["__row_id__"].to_list()]
+        return DuplicateReport(count=len(indices), indices=indices)
     except Exception as e:
         raise DuplicateDetectionError(f"Failed to detect duplicate rows: {e}")
 
 
-def detect_outliers(df: pd.DataFrame, column: str) -> OutlierReport:
+def detect_outliers(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, column: str, iqr_multiplier: float | None = None) -> OutlierReport:
     try:
-        col_series = df[column]
+        lf = _get_lazyframe(df_or_lf)
+        schema = lf.collect_schema()
 
-        # Exclude non-numeric AND boolean columns — booleans pass is_numeric_dtype
-        # but numpy arithmetic (subtraction) fails on them
-        if not pd.api.types.is_numeric_dtype(col_series) or pd.api.types.is_bool_dtype(col_series):
+        if column not in schema:
+            raise OutlierDetectionError(f"Target column '{column}' not found for outlier analysis")
+
+        dtype = schema[column]
+        multiplier = iqr_multiplier if iqr_multiplier is not None else _IQR_MULTIPLIER
+
+        # Skip non-numeric and boolean types
+        if not dtype.is_numeric() or dtype == pl.Boolean:
             return OutlierReport(count=0, indices=[], lower_fence=0.0, upper_fence=0.0)
 
-        clean_series = col_series.dropna()
-        if clean_series.empty:
+        # Compute quantiles lazily
+        quantiles = lf.select([
+            pl.col(column).quantile(0.25).alias("q25"),
+            pl.col(column).quantile(0.75).alias("q75")
+        ]).collect()
+
+        q25 = quantiles["q25"].item()
+        q75 = quantiles["q75"].item()
+
+        if q25 is None or q75 is None or np.isnan(q25) or np.isnan(q75):
             return OutlierReport(count=0, indices=[], lower_fence=0.0, upper_fence=0.0)
 
-        q25, q75 = np.percentile(clean_series, [25, 75])
-        iqr = q75 - q25
+        iqr = float(q75 - q25)
+        lower_fence = float(q25 - (multiplier * iqr))
+        upper_fence = float(q75 + (multiplier * iqr))
 
-        lower_fence = float(q25 - (_IQR_MULTIPLIER * iqr))
-        upper_fence = float(q75 + (_IQR_MULTIPLIER * iqr))
-
-        outlier_mask = (col_series < lower_fence) | (col_series > upper_fence)
-        outlier_indices = df.index[outlier_mask].tolist()
-
-        return OutlierReport(
-            count=int(outlier_mask.sum()),
-            indices=[int(idx) for idx in outlier_indices],
-            lower_fence=lower_fence,
-            upper_fence=upper_fence
+        outliers_df = (
+            lf.with_row_index("__row_id__")
+            .filter((pl.col(column) < lower_fence) | (pl.col(column) > upper_fence))
+            .select("__row_id__")
+            .collect()
         )
-    except KeyError as e:
-        raise OutlierDetectionError(f"Target column '{column}' not found for outlier analysis: {e}")
-    except TypeError as e:
-        raise OutlierDetectionError(f"Non-numeric operations encountered on '{column}': {e}")
+
+        indices = [int(x) for x in outliers_df["__row_id__"].to_list()]
+        return OutlierReport(
+            count=len(indices),
+            indices=indices,
+            lower_fence=lower_fence,
+            upper_fence=upper_fence,
+        )
     except Exception as e:
+        if isinstance(e, OutlierDetectionError):
+            raise
         raise OutlierDetectionError(f"Failed to execute outlier detection on '{column}': {e}")
 
 
-def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
+def run_duckdb_anomalies(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> AnomalyReport:
     try:
+        if isinstance(df_or_lf, pd.DataFrame):
+            df = df_or_lf
+        elif isinstance(df_or_lf, pl.DataFrame):
+            df = df_or_lf.to_pandas()
+        elif isinstance(df_or_lf, pl.LazyFrame):
+            df = df_or_lf.collect().to_pandas()
+        else:
+            raise AnomalyDetectionError(f"Unsupported data input type: {type(df_or_lf)}")
+
         ctx = duckdb.connect(database=":memory:")
         ctx.register("df_view", df)
 
-        null_cols: List[str] = []
-        zero_cols: List[str] = []
-        mismatches: List[Dict[str, Any]] = []
+        null_cols: list[str] = []
+        zero_cols: list[str] = []
+        mismatches: list[dict[str, Any]] = []
 
         total_rows = len(df)
         if total_rows == 0:
             return AnomalyReport(null_columns=[], all_zero_columns=[], type_mismatches=[])
 
-        # Detect DuckDB version to pick the correct regex function
-        version_str = ctx.execute("SELECT version()").fetchone()[0]  # e.g. "v0.10.3"
+        version_str = ctx.execute("SELECT version()").fetchone()[0]  # type: ignore
         try:
             major, minor = [int(x) for x in version_str.lstrip("v").split(".")[:2]]
         except Exception:
             major, minor = 0, 0
 
-        # regexp_full_match introduced in DuckDB 0.10; use REGEXP_MATCHES for older versions
-        if (major, minor) >= (0, 10):
-            regex_fn = "regexp_full_match"
-        else:
-            regex_fn = "REGEXP_MATCHES"
+        regex_fn = "regexp_full_match" if (major, minor) >= (0, 10) else "REGEXP_MATCHES"
 
         schema_res = ctx.execute("PRAGMA table_info('df_view')").fetchall()
 
@@ -287,11 +374,11 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                     AND TRY_CAST({escaped_col} AS DOUBLE) IS NOT NULL
                 """
                 num_pattern_cnt = ctx.execute(numeric_pattern_query).fetchone()
-                if num_pattern_cnt and num_pattern_cnt[0] > 0 and num_pattern_cnt[0] < total_rows:
+                if num_pattern_cnt and 0 < num_pattern_cnt[0] < total_rows:
                     mismatches.append({
                         "column": col_name,
                         "issue": "Mixed numeric and text patterns detected",
-                        "affected_rows": int(num_pattern_cnt[0])
+                        "affected_rows": int(num_pattern_cnt[0]),
                     })
 
                 if "email" in col_name.lower():
@@ -307,10 +394,9 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                             mismatches.append({
                                 "column": col_name,
                                 "issue": "Malformed structural email patterns",
-                                "affected_rows": int(email_fail_cnt[0])
+                                "affected_rows": int(email_fail_cnt[0]),
                             })
                     except duckdb.Error:
-                        # Regex function unavailable — skip silently rather than returning 0
                         pass
 
                 if "date" in col_name.lower():
@@ -325,13 +411,13 @@ def run_duckdb_anomalies(df: pd.DataFrame) -> AnomalyReport:
                         mismatches.append({
                             "column": col_name,
                             "issue": "Multi-format timeline sequences or corrupted string literals",
-                            "affected_rows": int(date_fail_cnt[0])
+                            "affected_rows": int(date_fail_cnt[0]),
                         })
 
         return AnomalyReport(
             null_columns=null_cols,
             all_zero_columns=zero_cols,
-            type_mismatches=mismatches
+            type_mismatches=mismatches,
         )
     except duckdb.Error as e:
         raise AnomalyDetectionError(f"DuckDB SQL engine runtime exception: {e}")

@@ -1,7 +1,7 @@
 # ui/charts.py
 
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 import tomllib
 import numpy as np
 import pandas as pd
@@ -36,18 +36,16 @@ def load_ui_charts_config() -> UIChartsAppConfig:
     try:
         config_path = Path(__file__).resolve().parents[1] / "config.toml"
         with open(config_path, "rb") as f:
-            return tomllib.load(f) # type: ignore
+            return tomllib.load(f)  # type: ignore
     except FileNotFoundError as e:
         raise UIChartsConfigLoadError(f"Configuration file mapping missing: {e}")
     except tomllib.TOMLDecodeError as e:
         raise UIChartsConfigLoadError(f"Malformed configuration syntax execution: {e}")
-    except Exception as e:
-        raise UIChartsConfigLoadError(f"Unexpected module configuration parsing error: {e}")
 
 _CONFIG: UIChartsAppConfig = load_ui_charts_config()
 _IQR_MULT: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
 
-_THEME: Dict[str, Any] = {
+_THEME: dict[str, Any] = {
     "font": {"family": "Inter, sans-serif", "color": "#FAFAFA"},
     "paper_bgcolor": "#0E1117",
     "plot_bgcolor": "#161A24",
@@ -148,7 +146,7 @@ def render_missing_heatmap(df: pd.DataFrame) -> None:
     except Exception as e:
         raise ChartRenderingError(f"Failure assembling missing trace heat density mapping: {e}")
 
-def render_duplicate_scatter(df: pd.DataFrame, dup_indices: List[int]) -> None:
+def render_duplicate_scatter(df: pd.DataFrame, dup_indices: list[int]) -> None:
     try:
         if len(df.columns) < 2:
             st.warning("Insufficient dimensional metrics array scale (needs >= 2 columns) to generate scatter projection context.")
@@ -184,7 +182,7 @@ def render_duplicate_scatter(df: pd.DataFrame, dup_indices: List[int]) -> None:
     except Exception as e:
         raise ChartRenderingError(f"Failure projecting multidimensional row duplicity coordinates: {e}")
 
-def render_score_bar_chart(column_scores: Dict[str, int]) -> None:
+def render_score_bar_chart(column_scores: dict[str, int]) -> None:
     try:
         if not column_scores:
             st.warning("Zero column tracking parameter matrices available to compile audit scorecard graph.")
@@ -194,7 +192,7 @@ def render_score_bar_chart(column_scores: Dict[str, int]) -> None:
         cols = [item[0] for item in sorted_scores]
         scores = [item[1] for item in sorted_scores]
         
-        colors: List[str] = []
+        colors: list[str] = []
         for s in scores:
             if s >= 90: colors.append("#2ECC71")
             elif s >= 70: colors.append("#3498DB")

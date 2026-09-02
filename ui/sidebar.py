@@ -1,7 +1,7 @@
 # ui/sidebar.py
 
 from pathlib import Path
-from typing import Any, Dict, Optional, TypedDict
+from typing import TypedDict
 import tomllib
 import pandas as pd
 import streamlit as st
@@ -72,8 +72,6 @@ def load_ui_sidebar_config() -> UISidebarAppConfig:
         }
     except tomllib.TOMLDecodeError as e:
         raise UISidebarConfigLoadError(f"Malformed schema array mapping inside target script: {e}")
-    except Exception as e:
-        raise UISidebarConfigLoadError(f"Unexpected operational parsing configuration breakdown: {e}")
 
 
 _CONFIG: UISidebarAppConfig = load_ui_sidebar_config()
@@ -96,15 +94,13 @@ def load_sample_dataset() -> pd.DataFrame:
         raise DataLoadError(f"Data layer file reference broken: {e}")
     except pd.errors.EmptyDataError as e:
         raise DataLoadError(f"Sample CSV is empty: {e}")
-    except Exception as e:
-        raise DataLoadError(f"Unexpected file read error: {e}")
 
 
 # ---------------------------------------------------------------------------
 # render_sidebar
 # ---------------------------------------------------------------------------
 
-def render_sidebar() -> Optional[pd.DataFrame]:
+def render_sidebar() -> pd.DataFrame | None:
     try:
         st.sidebar.title("Data Quality Auditor")
         st.sidebar.markdown("---")
@@ -116,7 +112,7 @@ def render_sidebar() -> Optional[pd.DataFrame]:
             key="data_stream_ingestion_selection",
         )
 
-        active_df: Optional[pd.DataFrame] = None
+        active_df: pd.DataFrame | None = None
 
         if upload_mode == "User File Upload":
             uploaded_file = st.sidebar.file_uploader(

@@ -1,6 +1,5 @@
-# ui/login.py
-
 import streamlit as st
+
 from credentials import validate_credentials
 
 
@@ -197,7 +196,21 @@ def render_login_page() -> bool:
             unsafe_allow_html=True,
         )
 
-        # Streamlit form (must be outside raw HTML)
+        # 1-Click Recruiter Demo Bypass Button
+        if st.button("⚡ 1-CLICK RECRUITER DEMO ACCESS", key="recruiter_demo_btn", type="primary"):
+            st.session_state["authenticated"] = True
+            st.session_state["username"] = "Recruiter-Demo"
+            st.session_state["user_name"] = "RECRUITER DEMO"
+            st.success("Authorized via 1-Click Recruiter Bypass.")
+            st.balloons()
+            st.rerun()
+
+        st.markdown(
+            "<div style='text-align:center; color:rgba(0,255,255,0.4); font-size:11px; margin: 15px 0;'>— OR SIGN IN WITH CREDENTIALS —</div>",
+            unsafe_allow_html=True,
+        )
+
+        # Streamlit form
         with st.form("login_form", clear_on_submit=False):
             username = st.text_input(
                 "Username",
@@ -216,8 +229,8 @@ def render_login_page() -> bool:
                 is_valid, message = validate_credentials(username, password)
                 if is_valid:
                     st.session_state["authenticated"] = True
-                    st.session_state["username"]      = username
-                    st.session_state["user_name"]     = username.upper()
+                    st.session_state["username"] = username
+                    st.session_state["user_name"] = username.upper()
                     st.success(message)
                     st.balloons()
                     st.rerun()

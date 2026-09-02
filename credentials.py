@@ -1,47 +1,45 @@
-from typing import Dict, Tuple
-import hashlib
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
+# Initialize Argon2 PasswordHasher instance
+_ph = PasswordHasher()
 
-# ---------------------------------------------------------------------------
-# Single User Store
-# ---------------------------------------------------------------------------
+# Pre-hashed password using argon2id for 'Qx9#mK2$vL7@nR4!'
+_DEMO_HASH = "$argon2id$v=19$m=65536,t=3,p=4$pLR7HllRjeJsbLQY2rWPhg$qGJicIKhkZR2djud0X35Hm/Q7wHY4jdUkfn/bU+exMg"
 
-USERS_DB: Dict[str, Dict[str, str]] = {
+USERS_DB: dict[str, dict[str, str]] = {
     "Ali-datasmith": {
         "name": "Ali Datasmith",
-        "password_hash": "9cab649e5d1529a9413a51dab1e4bf50eb6b39d06cfd44874c89aeb28d613b98",
+        "password_hash": _DEMO_HASH,
     },
 }
 
 
-# ---------------------------------------------------------------------------
-# Hash + Validate
-# ---------------------------------------------------------------------------
-
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hashes a plaintext password using Argon2id."""
+    return _ph.hash(password)
 
 
-def validate_credentials(username: str, password: str) -> Tuple[bool, str]:
+def validate_credentials(username: str, password: str) -> tuple[bool, str]:
+    """Validates user credentials against stored Argon2 hashes."""
     if not username or not password:
         return False, "Username and password required."
 
-    if username not in USERS_DB:
+    user_info = USERS_DB.get(username)
+    if not user_info:
         return False, "Invalid credentials. Access denied."
 
-    if hash_password(password) != USERS_DB[username]["password_hash"]:
+    try:
+        if _ph.verify(user_info["password_hash"], password):
+            if _ph.check_needs_rehash(user_info["password_hash"]):
+                user_info["password_hash"] = _ph.hash(password)
+            return True, f"Welcome back, {user_info['name']}!"
+    except (VerifyMismatchError, InvalidHashError):
         return False, "Invalid credentials. Access denied."
 
-    return True, f"Welcome back, {USERS_DB[username]['name']}!"
+    return False, "Invalid credentials. Access denied."
 
 
 def get_user_name(username: str) -> str:
+    """Retrieves the display name for a given username."""
     return USERS_DB.get(username, {}).get("name", username)
-
-
-# ---------------------------------------------------------------------------
-# Credentials
-# ---------------------------------------------------------------------------
-# Username : Ali-datasmith
-# Password : Qx9#mK2$vL7@nR4!
-# ---------------------------------------------------------------------------

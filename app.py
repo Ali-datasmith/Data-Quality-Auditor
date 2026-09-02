@@ -2,7 +2,7 @@
 
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 import pandas as pd
 import streamlit as st
@@ -19,7 +19,6 @@ from core.profiler import (
 from core.scorer import (
     score_column,
     score_dataframe,
-    get_score_label,
     generate_issue_summary,
 )
 from ui.sidebar import render_sidebar
@@ -37,7 +36,6 @@ from utils.cleaner import (
     export_cleaned_csv,
     generate_change_log,
 )
-from credentials import get_user_name
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +95,6 @@ def load_app_config() -> AppConfig:
         }
     except tomllib.TOMLDecodeError as e:
         raise AppConfigLoadError(f"Malformed TOML configuration syntax: {e}")
-    except Exception as e:
-        raise AppConfigLoadError(f"Unexpected configuration load failure: {e}")
 
 
 _CONFIG: AppConfig = load_app_config()
@@ -110,7 +106,7 @@ _CONFIG: AppConfig = load_app_config()
 
 def initialize_session_state() -> None:
     try:
-        defaults: Dict[str, Any] = {
+        defaults: dict[str, Any] = {
             "authenticated": False,
             "username":      None,
             "user_name":     None,
@@ -134,14 +130,14 @@ def initialize_session_state() -> None:
 # into a single flat dict per column that scorer and cleaner both consume
 # ---------------------------------------------------------------------------
 
-def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+def _build_enriched_profile(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     try:
         raw_profile    = generate_profile(df)
         anomaly_report = run_duckdb_anomalies(df)
         dup_report     = detect_duplicates(df)
         total_rows     = len(df)
 
-        enriched: Dict[str, Dict[str, Any]] = {}
+        enriched: dict[str, dict[str, Any]] = {}
         for col_name, col_profile in raw_profile.items():
             outlier_report = detect_outliers(df, col_name)
             mismatch_count = sum(
@@ -163,8 +159,6 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
                 "lower_fence":        outlier_report.lower_fence,
                 "upper_fence":        outlier_report.upper_fence,
                 "mismatch_count":     mismatch_count,
-                # NEW — duplicate count wired into every column so scorer
-                # can apply the duplicate penalty correctly
                 "duplicate_count":    dup_report.count,
                 "total_rows":         total_rows,
             }
@@ -173,7 +167,7 @@ def _build_enriched_profile(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
         raise OrchestrationError(f"Profile enrichment pipeline failure: {e}")
 
 
-def _build_column_scores(profile: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
+def _build_column_scores(profile: dict[str, dict[str, Any]]) -> dict[str, int]:
     try:
         return {col_name: score_column(stats) for col_name, stats in profile.items()}
     except Exception as e:
@@ -498,7 +492,6 @@ def _render_landing() -> None:
 
 def main() -> None:
     try:
-        # FIX: duplicate page_icon and duplicate initial_sidebar_state args removed
         st.set_page_config(
             page_title="Data Quality Auditor",
             page_icon="🛡️",
@@ -509,16 +502,14 @@ def main() -> None:
         initialize_session_state()
 
         # ===== AUTHENTICATION CHECK =====
-        # Must happen BEFORE _inject_neon_css() and BEFORE main UI rendering
         if not st.session_state.get("authenticated", False):
             render_login_page()
-            return  # Stop — don't render the main app until login succeeds
+            return
 
         # ===== MAIN APP STARTS HERE =====
         _inject_neon_css()
 
         # ===== SIDEBAR USER INFO & LOGOUT =====
-        # FIX: moved here — renders immediately on login, not after data load
         with st.sidebar:
             username = st.session_state.get("username", "user")
             st.markdown(
@@ -545,7 +536,7 @@ def main() -> None:
                 st.rerun()
             st.markdown("---")
 
-        df: Optional[pd.DataFrame] = render_sidebar()
+        df: pd.DataFrame | None = render_sidebar()
 
         # New file uploaded — reset all cached analysis so it re-runs cleanly
         if df is not None:
@@ -556,7 +547,7 @@ def main() -> None:
             st.session_state["overall_score"] = None
             st.session_state["issues"]        = None
 
-        active_df: Optional[pd.DataFrame] = st.session_state.get("raw_df")
+        active_df: pd.DataFrame | None = st.session_state.get("raw_df")
 
         if active_df is None:
             st.info(
@@ -574,23 +565,22 @@ def main() -> None:
         # Run analysis once and cache in session state
         if st.session_state.get("profile") is None:
             with st.spinner("SCANNING DATA MATRIX..."):
-                profile      = _build_enriched_profile(active_df)
-                col_scores   = _build_column_scores(profile)
-                overall_score = score_dataframe(profile)
-                issues       = generate_issue_summary(profile)
+                prof = _build_enriched_profile(active_df)
+                scores = _build_column_scores(prof)
+                ov_score = score_dataframe(prof)
+                iss = generate_issue_summary(prof)
 
-                st.session_state["profile"]       = profile
-                st.session_state["col_scores"]    = col_scores
-                st.session_state["overall_score"] = overall_score
-                st.session_state["issues"]        = issues
+                st.session_state["profile"]       = prof
+                st.session_state["col_scores"]    = scores
+                st.session_state["overall_score"] = ov_score
+                st.session_state["issues"]        = iss
 
-        profile:       Dict[str, Dict[str, Any]] = st.session_state["profile"]
-        col_scores:    Dict[str, int]            = st.session_state["col_scores"]
-        overall_score: int                       = st.session_state["overall_score"]
-        issues:        List[Any]                 = st.session_state["issues"]
+        profile: dict[str, dict[str, Any]] = st.session_state["profile"]
+        col_scores: dict[str, int]         = st.session_state["col_scores"]
+        overall_score: int                 = st.session_state["overall_score"]
+        issues: list[Any]                  = st.session_state["issues"]
 
-        # Duplicate report (lightweight — not cached, uses session iqr pref)
-        dup_report     = detect_duplicates(active_df)
+        dup_report = detect_duplicates(active_df)
         duplicate_count = dup_report.count
 
         # --- Dashboard ---
@@ -624,8 +614,6 @@ def main() -> None:
         )
         render_suggestion_box(all_suggestions)
 
-        # FIX: two separate execute buttons existed (one from old code, one from new).
-        # Merged into a single button with change log feedback.
         if st.button("EXECUTE ALL FIXES", type="primary", key="execute_fixes_btn"):
             with st.spinner("APPLYING REMEDIATIONS..."):
                 cleaned = apply_fixes(active_df, [s.__dict__ for s in all_suggestions])
@@ -636,10 +624,9 @@ def main() -> None:
                     f"{sum(change_log.mutations_applied.values())} values mutated."
                 )
 
-        cleaned_df: Optional[pd.DataFrame] = st.session_state.get("cleaned_df")
+        cleaned_df: pd.DataFrame | None = st.session_state.get("cleaned_df")
         if cleaned_df is not None:
             csv_bytes = export_cleaned_csv(cleaned_df)
-            # FIX: duplicate label and duplicate type= args removed
             st.download_button(
                 label="⬇ DOWNLOAD CLEANED CSV",
                 data=csv_bytes,

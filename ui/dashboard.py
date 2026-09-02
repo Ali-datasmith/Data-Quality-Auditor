@@ -1,7 +1,7 @@
 # ui/dashboard.py
 
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 import tomllib
 import pandas as pd
 import plotly.graph_objects as go
@@ -58,13 +58,11 @@ def load_ui_dashboard_config() -> UIDashboardAppConfig:
         }
     except tomllib.TOMLDecodeError as e:
         raise UIDashboardConfigLoadError(f"Malformed schema file parsing parameters: {e}")
-    except Exception as e:
-        raise UIDashboardConfigLoadError(f"Unexpected operational layout setup failure: {e}")
 
 
 _CONFIG: UIDashboardAppConfig = load_ui_dashboard_config()
 
-_THEME: Dict[str, Any] = {
+_THEME: dict[str, Any] = {
     "font":         {"family": "JetBrains Mono, monospace", "color": "#FAFAFA"},
     "paper_bgcolor": "rgba(0,0,0,0)",
     "plot_bgcolor":  "rgba(13,18,32,0.6)",
@@ -72,20 +70,10 @@ _THEME: Dict[str, Any] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# render_overview_metrics
-# FIX: shortened all 4 metric labels so they never truncate with "..."
-#      Old → New:
-#      "Overall Quality Index"      → "Quality Score"
-#      "Total Logged Rows"          → "Total Rows"
-#      "Total Feature Columns"      → "Columns"
-#      "Detected Issue Indicators"  → "Issues Found"
-# ---------------------------------------------------------------------------
-
 def render_overview_metrics(
     score: int,
-    profile: Dict[str, Dict[str, Any]],
-    issues: List[QualityIssue],
+    profile: dict[str, dict[str, Any]],
+    issues: list[QualityIssue],
 ) -> None:
     try:
         if not profile:
@@ -101,23 +89,23 @@ def render_overview_metrics(
 
         with c1:
             st.metric(
-                label="Quality Score",        # was: "Overall Quality Index"
+                label="Quality Score",
                 value=f"{score}/100",
                 delta=label_meta.category,
             )
         with c2:
             st.metric(
-                label="Total Rows",           # was: "Total Logged Rows"
+                label="Total Rows",
                 value=f"{total_rows:,}",
             )
         with c3:
             st.metric(
-                label="Columns",              # was: "Total Feature Columns"
+                label="Columns",
                 value=f"{total_cols}",
             )
         with c4:
             st.metric(
-                label="Issues Found",         # was: "Detected Issue Indicators"
+                label="Issues Found",
                 value=f"{issue_count}",
                 delta="Requires Fix" if issue_count > 0 else "Clean",
                 delta_color="inverse" if issue_count > 0 else "normal",
@@ -133,7 +121,6 @@ def render_score_gauge(score: int) -> None:
     try:
         label_meta = get_score_label(score)
 
-        # Enhanced gauge with vibrant gradient bar and glassmorphic styling
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=score,
@@ -163,7 +150,7 @@ def render_score_gauge(score: int) -> None:
                     "line": {
                         "color": label_meta.color_hex,
                         "width": 3,
-                    }
+                    },
                 },
                 "bgcolor": "rgba(255,255,255,0.02)",
                 "borderwidth": 2,
@@ -179,7 +166,7 @@ def render_score_gauge(score: int) -> None:
                     "line": {"color": "rgba(0,255,255,0.3)", "width": 2},
                     "thickness": 0.75,
                     "value": 85,
-                }
+                },
             },
         ))
 
@@ -195,15 +182,15 @@ def render_score_gauge(score: int) -> None:
             height=300,
             showlegend=False,
             annotations=[
-                dict(
-                    text=f"<b>{label_meta.category}</b>",
-                    x=0.5,
-                    y=-0.15,
-                    showarrow=False,
-                    font=dict(size=16, color=label_meta.color_hex, family="JetBrains Mono"),
-                    xref="paper",
-                    yref="paper",
-                )
+                {
+                    "text": f"<b>{label_meta.category}</b>",
+                    "x": 0.5,
+                    "y": -0.15,
+                    "showarrow": False,
+                    "font": {"size": 16, "color": label_meta.color_hex, "family": "JetBrains Mono"},
+                    "xref": "paper",
+                    "yref": "paper",
+                }
             ],
         )
 
@@ -216,11 +203,11 @@ def render_score_gauge(score: int) -> None:
 
 
 def render_column_table(
-    profile: Dict[str, Dict[str, Any]],
-    scores: Dict[str, int],
+    profile: dict[str, dict[str, Any]],
+    scores: dict[str, int],
 ) -> None:
     try:
-        table_records: List[Dict[str, Any]] = []
+        table_records: list[dict[str, Any]] = []
 
         for col_name, stats in profile.items():
             col_score    = scores.get(col_name, 0)
@@ -228,7 +215,7 @@ def render_column_table(
             outlier_cnt  = int(stats.get("outlier_count", 0))
             mismatch_cnt = int(stats.get("mismatch_count", 0))
 
-            badges: List[str] = []
+            badges: list[str] = []
             if missing_cnt  > 0: badges.append("🚨 Missing")
             if outlier_cnt  > 0: badges.append("📊 Outliers")
             if mismatch_cnt > 0: badges.append("⚠️ Mismatch")
@@ -268,7 +255,7 @@ def render_column_table(
         )
 
 
-def render_issue_list(issues: List[QualityIssue]) -> None:
+def render_issue_list(issues: list[QualityIssue]) -> None:
     try:
         st.markdown("### Detected Issues")
 

@@ -5,3 +5,5 @@ __pycache__/
 *.csv
 !data/sample_messy.csv
 .env
+.mypy_cache/
+.pytest_cache/
