@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, TypedDict
-import tomllib
-import numpy as np
+from typing import Any, TypedDict
 
+import numpy as np
+import tomllib
 
 # ---------------------------------------------------------------------------
 # Config TypedDicts
@@ -23,9 +23,17 @@ class ScorerConfigDetection(TypedDict):
     max_upload_mb: int
 
 
+class ScorerConfigGrades(TypedDict):
+    excellent: int
+    good: int
+    fair: int
+    poor: int
+
+
 class ScorerAppConfig(TypedDict):
     scoring: ScorerConfigScoring
     detection: ScorerConfigDetection
+    grades: ScorerConfigGrades
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +79,7 @@ class QualityIssue:
 class DatasetSummary:
     overall_score: int
     label: ScoreLabel
-    issues: List[QualityIssue]
+    issues: list[QualityIssue]
 
 
 # ---------------------------------------------------------------------------
@@ -80,27 +88,30 @@ class DatasetSummary:
 
 def load_scoring_config() -> ScorerAppConfig:
     try:
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+        config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
     except FileNotFoundError:
-        # Graceful fallback — no crash if config.toml is missing
         return {
             "scoring": {
-                "completeness_weight": 0.30,
+                "completeness_weight": 0.40,
                 "uniqueness_weight":   0.20,
-                "consistency_weight":  0.30,
+                "consistency_weight":  0.20,
                 "outlier_weight":      0.20,
             },
             "detection": {
                 "outlier_iqr_multiplier": 1.5,
                 "max_upload_mb": 200,
             },
+            "grades": {
+                "excellent": 85,
+                "good": 70,
+                "fair": 50,
+                "poor": 30,
+            },
         }
     except tomllib.TOMLDecodeError as e:
         raise ConfigLoadError(f"Malformed TOML syntax inside configuration file: {e}")
-    except Exception as e:
-        raise ConfigLoadError(f"Unexpected runtime failure loading configuration: {e}")
 
 
 _CONFIG: ScorerAppConfig = load_scoring_config()
@@ -109,35 +120,35 @@ _W_UNIQUENESS:   float = _CONFIG["scoring"]["uniqueness_weight"]
 _W_CONSISTENCY:  float = _CONFIG["scoring"]["consistency_weight"]
 _W_OUTLIER:      float = _CONFIG["scoring"]["outlier_weight"]
 
+_GRADES = _CONFIG.get("grades", {"excellent": 85, "good": 70, "fair": 50, "poor": 30})
 
-# ---------------------------------------------------------------------------
-# score_column
-# FIX 1 — String columns no longer receive a free outlier_score = 100.
-#          If the column is non-numeric, outlier_score is excluded from the
-#          weighted average entirely and the remaining weights are re-normalised
-#          so the total still sums to 1.0.
-# FIX 2 — Duplicate penalty is now wired in via `duplicate_count` key in
-#          col_stats so it actually reduces the per-column score.
-# ---------------------------------------------------------------------------
 
-def score_column(col_stats: Dict[str, Any]) -> int:
+def _is_numeric_dtype(dtype_str: str) -> bool:
+    dtype = dtype_str.lower()
+    if "bool" in dtype:
+        return False
+    return any(t in dtype for t in ("int", "float", "decimal", "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64"))
+
+
+def score_column(col_stats: dict[str, Any]) -> int:
     try:
-        total_rows   = int(col_stats.get("total_rows", 1)) or 1
-        dtype        = str(col_stats.get("dtype", ""))
-        missing_cnt  = int(col_stats.get("missing_count", 0))
-        unique_cnt   = int(col_stats.get("unique_count", 0))
-        outlier_cnt  = int(col_stats.get("outlier_count", 0))
+        total_rows = int(col_stats.get("total_rows", 1))
+        if total_rows <= 0:
+            total_rows = 1
+
+        dtype = str(col_stats.get("dtype", ""))
+        missing_cnt = int(col_stats.get("missing_count", 0))
+        unique_cnt = int(col_stats.get("unique_count", 0))
+        outlier_cnt = int(col_stats.get("outlier_count", 0))
         mismatch_cnt = int(col_stats.get("mismatch_count", 0))
-        # NEW — duplicate rows that overlap with this column
-        duplicate_cnt = int(col_stats.get("duplicate_count", 0))
 
         # --- Completeness ------------------------------------------------
-        missing_pct       = (missing_cnt / total_rows) * 100.0
+        missing_pct = (missing_cnt / total_rows) * 100.0
         completeness_score = max(0.0, 100.0 - missing_pct)
 
         # --- Uniqueness (context-aware) ----------------------------------
         uniqueness_ratio = unique_cnt / total_rows
-        is_numeric = any(t in dtype for t in ("int", "float", "Int", "Float"))
+        is_numeric = _is_numeric_dtype(dtype)
 
         if is_numeric:
             if uniqueness_ratio < 0.05:
@@ -147,28 +158,24 @@ def score_column(col_stats: Dict[str, Any]) -> int:
             else:
                 uniqueness_score = 85.0
         else:
-            # String/object: all-unique IDs should not inflate the score
             if uniqueness_ratio > 0.95:
-                uniqueness_score = 65.0   # likely ID column — neutral
+                uniqueness_score = 65.0
             elif uniqueness_ratio > 0.60:
                 uniqueness_score = 80.0
             elif uniqueness_ratio > 0.05:
-                uniqueness_score = 90.0   # good categorical spread
+                uniqueness_score = 90.0
             elif uniqueness_ratio > 0.01:
                 uniqueness_score = 60.0
             else:
-                uniqueness_score = 20.0   # nearly constant column
+                uniqueness_score = 20.0
 
         # --- Consistency (type mismatches) --------------------------------
-        mismatch_pct      = (mismatch_cnt / total_rows) * 100.0
-        consistency_score  = max(0.0, 100.0 - (mismatch_pct * 2.5))
+        mismatch_pct = (mismatch_cnt / total_rows) * 100.0
+        consistency_score = max(0.0, 100.0 - (mismatch_pct * 2.5))
 
         # --- Outlier rate  ------------------------------------------------
-        # FIX 1: non-numeric columns cannot have IQR outliers.
-        # Instead of assigning them outlier_score=100 (free bonus), we skip
-        # the outlier dimension entirely and re-normalise the weights.
         if is_numeric:
-            outlier_pct   = (outlier_cnt / total_rows) * 100.0
+            outlier_pct = (outlier_cnt / total_rows) * 100.0
             outlier_score = max(0.0, 100.0 - (outlier_pct * 3.0))
 
             raw_weighted = (
@@ -178,7 +185,6 @@ def score_column(col_stats: Dict[str, Any]) -> int:
                 (_W_OUTLIER      * outlier_score)
             )
         else:
-            # Re-normalise the three remaining weights so they still sum to 1.0
             total_w = _W_COMPLETENESS + _W_UNIQUENESS + _W_CONSISTENCY
             if total_w == 0:
                 total_w = 1.0
@@ -192,78 +198,91 @@ def score_column(col_stats: Dict[str, Any]) -> int:
                 (w_x * consistency_score)
             )
 
-        # --- FIX 2: Duplicate penalty ------------------------------------
-        # Each duplicate row shaves points off this column's score.
-        # Penalty = (duplicate_pct * 0.5) capped at 20 points.
-        duplicate_pct     = (duplicate_cnt / total_rows) * 100.0
-        duplicate_penalty = min(20.0, duplicate_pct * 0.5)
-        raw_weighted      = max(0.0, raw_weighted - duplicate_penalty)
-
         return int(np.clip(np.round(raw_weighted), 0, 100))
 
-    except KeyError as e:
-        raise ScoreCalculationError(
-            f"Missing essential evaluation metric in column statistics: {e}"
-        )
-    except ZeroDivisionError as e:
-        raise ScoreCalculationError(f"Zero division in score calculation: {e}")
     except Exception as e:
         raise ScoreCalculationError(f"Failed to calculate column quality score: {e}")
 
 
-# ---------------------------------------------------------------------------
-# score_dataframe
-# ---------------------------------------------------------------------------
-
-def score_dataframe(profile: Dict[str, Dict[str, Any]]) -> int:
+def score_dataframe(profile: dict[str, dict[str, Any]]) -> int:
     try:
         if not profile:
             return 0
-        scores: List[int] = [score_column(stats) for stats in profile.values()]
-        return int(np.clip(np.round(np.mean(scores)), 0, 100))
-    except ScoreCalculationError as e:
-        raise ScoreCalculationError(f"Dataset scoring failure: {e}")
+        scores: list[int] = [score_column(stats) for stats in profile.values()]
+        mean_score = float(np.mean(scores))
+
+        # Apply duplicate penalty ONCE at the dataset level if dataset_duplicate_count is present
+        first_col = next(iter(profile.values()))
+        total_rows = int(first_col.get("total_rows", 1))
+        if total_rows <= 0:
+            total_rows = 1
+
+        dup_cnt = int(first_col.get("dataset_duplicate_count", 0))
+        dup_pct = (dup_cnt / total_rows) * 100.0
+        dup_penalty = min(20.0, dup_pct * 0.5)
+
+        final_score = max(0.0, mean_score - dup_penalty)
+        return int(np.clip(np.round(final_score), 0, 100))
     except Exception as e:
-        raise ScoreCalculationError(
-            f"Failed to compute dataset level quality score: {e}"
-        )
+        raise ScoreCalculationError(f"Failed to compute dataset level quality score: {e}")
 
-
-# ---------------------------------------------------------------------------
-# get_score_label
-# ---------------------------------------------------------------------------
 
 def get_score_label(score: int) -> ScoreLabel:
     try:
-        if score >= 85:
+        if score >= _GRADES.get("excellent", 85):
             return ScoreLabel(category="Excellent", color_hex="#2ECC71")
-        if score >= 70:
+        if score >= _GRADES.get("good", 70):
             return ScoreLabel(category="Good",      color_hex="#3498DB")
-        if score >= 50:
+        if score >= _GRADES.get("fair", 50):
             return ScoreLabel(category="Fair",      color_hex="#F1C40F")
-        if score >= 30:
+        if score >= _GRADES.get("poor", 30):
             return ScoreLabel(category="Poor",      color_hex="#E67E22")
         return ScoreLabel(category="Critical",      color_hex="#E74C3C")
     except Exception as e:
         raise EvaluationError(f"Failed to evaluate score label: {e}")
 
 
-# ---------------------------------------------------------------------------
-# generate_issue_summary
-# FIX 2 (continued): duplicate issues are now surfaced in the issue list
-# ---------------------------------------------------------------------------
-
-def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIssue]:
+def generate_issue_summary(profile: dict[str, dict[str, Any]]) -> list[QualityIssue]:
     try:
-        issues_list: List[QualityIssue] = []
+        issues_list: list[QualityIssue] = []
+
+        if not profile:
+            return issues_list
+
+        first_col = next(iter(profile.values()))
+        total_rows = int(first_col.get("total_rows", 1))
+        if total_rows <= 0:
+            total_rows = 1
+
+        # Check dataset-level duplicates once
+        dataset_dup_cnt = int(first_col.get("dataset_duplicate_count", 0))
+        if dataset_dup_cnt > 0:
+            duplicate_pct = (dataset_dup_cnt / total_rows) * 100.0
+            penalty = min(20.0, duplicate_pct * 0.5)
+            severity = "High" if duplicate_pct > 5.0 else "Medium"
+            issues_list.append(QualityIssue(
+                column="Dataset",
+                metric="Duplicates",
+                severity=severity,
+                score_impact=float(np.round(penalty, 2)),
+                description=f"Dataset contains {dataset_dup_cnt} duplicate rows ({duplicate_pct:.2f}% of total).",
+            ))
+
+        total_w = _W_COMPLETENESS + _W_UNIQUENESS + _W_CONSISTENCY
+        if total_w == 0:
+            total_w = 1.0
+
+        w_completeness_non_numeric = _W_COMPLETENESS / total_w
+        w_consistency_non_numeric = _W_CONSISTENCY / total_w
 
         for col_name, stats in profile.items():
-            total_rows = int(stats.get("total_rows", 1)) or 1
+            dtype = str(stats.get("dtype", ""))
+            is_numeric = _is_numeric_dtype(dtype)
 
-            # Completeness
             missing_pct = float(stats.get("missing_percentage", 0.0))
             if missing_pct > 0.0:
-                impact   = missing_pct * _W_COMPLETENESS
+                comp_w = _W_COMPLETENESS if is_numeric else w_completeness_non_numeric
+                impact = missing_pct * comp_w
                 severity = (
                     "Critical" if missing_pct > 30.0
                     else "High" if missing_pct > 10.0
@@ -277,57 +296,31 @@ def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIs
                     description=f"Column contains {missing_pct:.2f}% missing values.",
                 ))
 
-            # Type consistency
             mismatch_cnt = int(stats.get("mismatch_count", 0))
             if mismatch_cnt > 0:
                 mismatch_pct = (mismatch_cnt / total_rows) * 100.0
-                impact   = mismatch_pct * _W_CONSISTENCY
+                cons_w = _W_CONSISTENCY if is_numeric else w_consistency_non_numeric
+                impact = mismatch_pct * cons_w
                 severity = "High" if mismatch_pct > 15.0 else "Medium"
                 issues_list.append(QualityIssue(
                     column=col_name,
                     metric="Type Consistency",
                     severity=severity,
                     score_impact=float(np.round(impact, 2)),
-                    description=(
-                        f"Detected {mismatch_cnt} structural type anomalies "
-                        f"in column values."
-                    ),
+                    description=f"Detected {mismatch_cnt} structural type anomalies in column values.",
                 ))
 
-            # Outliers (numeric only)
             outlier_cnt = int(stats.get("outlier_count", 0))
-            dtype       = str(stats.get("dtype", ""))
-            is_numeric  = any(t in dtype for t in ("int", "float", "Int", "Float"))
             if outlier_cnt > 0 and is_numeric:
                 outlier_pct = (outlier_cnt / total_rows) * 100.0
-                impact   = outlier_pct * _W_OUTLIER
+                impact = outlier_pct * _W_OUTLIER
                 severity = "High" if outlier_pct > 10.0 else "Medium"
                 issues_list.append(QualityIssue(
                     column=col_name,
                     metric="Outlier Rate",
                     severity=severity,
                     score_impact=float(np.round(impact, 2)),
-                    description=(
-                        f"Detected {outlier_cnt} statistical anomalies "
-                        f"outside IQR thresholds."
-                    ),
-                ))
-
-            # FIX 2 — Duplicates now appear in the issue list
-            duplicate_cnt = int(stats.get("duplicate_count", 0))
-            if duplicate_cnt > 0:
-                duplicate_pct = (duplicate_cnt / total_rows) * 100.0
-                penalty       = min(20.0, duplicate_pct * 0.5)
-                severity      = "High" if duplicate_pct > 5.0 else "Medium"
-                issues_list.append(QualityIssue(
-                    column=col_name,
-                    metric="Duplicates",
-                    severity=severity,
-                    score_impact=float(np.round(penalty, 2)),
-                    description=(
-                        f"Column participates in {duplicate_cnt} duplicate rows "
-                        f"({duplicate_pct:.2f}% of total)."
-                    ),
+                    description=f"Detected {outlier_cnt} statistical anomalies outside IQR thresholds.",
                 ))
 
         severity_map = {"Critical": 0, "High": 1, "Medium": 2}
@@ -340,25 +333,17 @@ def generate_issue_summary(profile: Dict[str, Dict[str, Any]]) -> List[QualityIs
         raise EvaluationError(f"Failed to generate issue summary: {e}")
 
 
-# ---------------------------------------------------------------------------
-# generate_dataset_summary
-# ---------------------------------------------------------------------------
-
 def generate_dataset_summary(
-    profile: Dict[str, Dict[str, Any]]
+    profile: dict[str, dict[str, Any]]
 ) -> DatasetSummary:
     try:
         overall_score = score_dataframe(profile)
-        label  = get_score_label(overall_score)
+        label = get_score_label(overall_score)
         issues = generate_issue_summary(profile)
         return DatasetSummary(
             overall_score=overall_score,
             label=label,
             issues=issues,
         )
-    except (ScoreCalculationError, EvaluationError) as e:
-        raise ScoreCalculationError(f"Dataset summary compilation failed: {e}")
     except Exception as e:
-        raise ScoreCalculationError(
-            f"Unexpected failure compiling dataset summary: {e}"
-        )
+        raise ScoreCalculationError(f"Unexpected failure compiling dataset summary: {e}")

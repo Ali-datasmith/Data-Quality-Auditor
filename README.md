@@ -1,525 +1,193 @@
-# 🛡️ Data Quality Auditor — Enterprise Edition
+# 🛡️ Data Quality Auditor
 
-**A powerful, glassmorphic web application for automated data quality assessment, anomaly detection, and intelligent data remediation.**
+[![Build Status](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml)
+[![CodeQL Security Analysis](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
+[![Polars Engine](https://img.shields.io/badge/engine-Polars%20Lazy-FFD43B.svg)](https://pypolars.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Technology Stack](#technology-stack)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage Guide](#usage-guide)
-- [Project Structure](#project-structure)
-- [Authentication](#authentication)
-- [Quality Scoring](#quality-scoring)
-- [Advanced Features](#advanced-features)
-- [Screenshots](#screenshots)
-- [Demo Video](#demo-video)
-- [Bug Fixes & Improvements](#bug-fixes--improvements)
-- [Contributing](#contributing)
-- [License](#license)
+An enterprise-grade B2B Streamlit web application engineered for real-time automated data quality audits, statistical profiling, anomaly detection, and automated remediation pipelines. Powered by modern Python 3.12+ tooling, Polars lazy evaluation, DuckDB SQL pattern checks, and Argon2id security authentication.
 
 ---
 
-## 🎯 Overview
+## 🌟 Key Features
 
-**Data Quality Auditor** is an enterprise-grade solution for assessing, monitoring, and improving data quality across your datasets. It combines advanced statistical analysis, intelligent anomaly detection, and automated remediation to deliver actionable insights in real-time.
-
-Whether you're a data engineer validating pipelines, a data analyst ensuring dataset integrity, or a business stakeholder maintaining data governance — this tool provides the insights you need to maintain high-quality data standards.
-
-**Core Value Proposition:**
-- ✅ **Instant Quality Score** (0–100) for any CSV dataset
-- ✅ **Automated Anomaly Detection** — identifies duplicates, outliers, type mismatches, nulls
-- ✅ **One-Click Data Cleaning** — apply fixes with a single button
-- ✅ **Enterprise UI** — glassmorphic neon theme with smooth animations
-- ✅ **Role-Based Access** — secure login with credential management
+* **⚡ Fast Data Ingestion & Lazy Evaluation:** Ingests CSV datasets using Polars (`pl.read_csv`, `pl.scan_csv`, `pl.LazyFrame`) for fast parsing and low-memory statistical profiling.
+* **🔐 Enterprise Argon2 Authentication:** Secure password hashing using `argon2-cffi` (`Argon2id` with key-stretched PBKDF2 fallback) and a **1-Click Recruiter Demo Access** bypass button.
+* **📊 Multi-Dimensional Data Quality Scoring (0–100):** Algorithmic scoring model assessing completeness, uniqueness, type consistency, outlier rates, and a single dataset-level duplicate penalty.
+* **🔎 DuckDB Pattern Anomaly Detection:** In-memory SQL pattern checks verifying regex emails, multi-format timestamps, and string/numeric pattern mismatches.
+* **🛠️ Automated Data Remediation:** Type-safe missing value imputation, IQR variance outlier clamping, duplicate row purging, mutation change-log tracking, and clean CSV export.
+* **🛡️ Production Quality Gates:** Type-hinted under Python 3.12+ syntax, verified with `mypy`, linted via `ruff`, and validated via `pytest` (26 test cases).
 
 ---
 
-## ✨ Key Features
+## 🏛️ Architecture Overview
 
-### 1. **Comprehensive Data Profiling**
-- Per-column statistical analysis (min, max, mean, std, unique count)
-- Missing value detection and percentage calculation
-- Data type inference and validation
-- Top values frequency distribution
-
-### 2. **Advanced Quality Scoring**
-- **Weighted Algorithm** balances 4 dimensions:
-  - Completeness (30%) — missing values
-  - Uniqueness (20%) — cardinality analysis
-  - Consistency (30%) — type mismatches & anomalies
-  - Outlier Rate (20%) — statistical outliers via IQR method
-- Real-time score computation with gradient scale (Critical → Excellent)
-- Per-column quality breakdown for granular insights
-
-### 3. **Intelligent Anomaly Detection**
-- **IQR-based Outlier Detection** — identifies statistical anomalies in numeric columns
-- **Duplicate Row Detection** — flags and counts duplicate records
-- **Type Mismatch Detection** — finds structural inconsistencies
-- **Null Column Detection** — identifies completely empty columns
-- **All-Zero Column Detection** — flags constant-value columns
-- **Email & Date Validation** — regex-based format checking
-
-### 4. **Automated Data Cleaning**
-- **Smart Fix Suggestions** — contextual recommendations per column
-- **Intelligent Imputation** — median for numeric, mode for categorical
-- **Date Normalization** — ISO-8601 standardization
-- **Outlier Clamping** — boundary-based numeric smoothing
-- **Deduplication** — remove exact duplicate rows
-- **Change Log** — track mutations and rows dropped
-
-### 5. **Enterprise UI with Glassmorphism**
-- **Neon Cyberpunk Theme** — cyan/purple accents on deep navy
-- **Glass Effect Cards** — frosted transparency with backdrop blur
-- **Responsive Dashboard** — 4-column metric layout
-- **Interactive Gauge Chart** — animated quality score visualization
-- **Smooth Animations** — hover effects, transitions, scanline overlay
-- **Dark Mode Native** — zero eye strain, 24/7 usability
-
-### 6. **Secure Authentication**
-- Role-based login system
-- Single-user credential management
-- Session-based access control
-- Graceful logout with state reset
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Streamlit 1.28+, Plotly, HTML/CSS |
-| **Backend** | Python 3.11+, Pandas, NumPy |
-| **Data Processing** | Polars (fast CSV parsing), DuckDB (SQL anomalies) |
-| **Styling** | CSS Glassmorphism, JetBrains Mono font |
-| **Authentication** | SHA-256 hashing, Session state management |
-| **Deployment** | Streamlit Cloud / Docker |
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Streamlit App (app.py)            │
-│          [Auth → Dashboard → Analysis]              │
-└──────────────────┬──────────────────────────────────┘
-                   │
-        ┌──────────┼──────────┬──────────┐
-        ▼          ▼          ▼          ▼
-   ┌────────┐ ┌────────┐ ┌─────────┐ ┌──────────┐
-   │ Core   │ │   UI   │ │ Utils   │ │ Security │
-   ├────────┤ ├────────┤ ├─────────┤ ├──────────┤
-   │Profiler│ │Sidebar │ │Cleaner  │ │Credentials
-   │Scorer  │ │Dashboard │ │ │ Login   │
-   │Detect. │ │Charts  │ │ │         │
-   └────────┘ └────────┘ └─────────┘ └──────────┘
-        │          │          │          │
-        └──────────┼──────────┼──────────┘
-                   │
-        ┌──────────▼──────────┐
-        │  Data Layer (CSV)   │
-        │  Pandas / Polars    │
-        └─────────────────────┘
+```mermaid
+graph TD
+    A[User CSV Upload / Sample Ingestion] -->|Polars pl.read_csv| B[Data Ingestion Layer]
+    B --> C[Polars LazyFrame Profiling Engine]
+    C --> D[DuckDB SQL Pattern Anomaly Analysis]
+    C --> E[IQR Outlier Variance Bounds Engine]
+    D --> F[Multi-Dimensional Quality Scorer]
+    E --> F
+    F --> G[Glassmorphic Streamlit Dashboard UI]
+    G --> H[Type-Safe Remediation Pipeline]
+    H -->|Polars Export / In-Memory Download| I[Audited Clean CSV Download]
 ```
 
-### Module Breakdown
+---
 
-**`core/`** — Data processing engine
-- `profiler.py` — statistical analysis, anomaly detection
-- `scorer.py` — quality scoring algorithm, issue ranking
+## 📊 Data Quality Scoring Model
 
-**`ui/`** — User interface components
-- `login.py` — glassmorphic authentication form
-- `sidebar.py` — file upload, settings panel
-- `dashboard.py` — metrics, gauge, column table
-- `charts.py` — plotly visualizations
-- `report_card.py` — per-column deep-dive cards
+The dataset quality index (0–100) evaluates statistical metrics against configurable weights defined in `config.toml`:
 
-**`utils/`** — Helper functions
-- `cleaner.py` — fix suggestions, data remediation, export
+| Metric Dimension | Default Weight | Assessment Logic & Calculation |
+| :--- | :---: | :--- |
+| **Completeness** | **40%** | `100 - (missing_count / total_rows * 100)`. Penalizes blank or null fields. |
+| **Uniqueness** | **20%** | Context-aware cardinality ratio (`null_excluded_unique_count / total_rows`). Evaluates value distribution for categorical vs ID fields. |
+| **Type Consistency** | **20%** | Evaluates DuckDB structural type mismatches (`100 - mismatch_pct * 2.5`). |
+| **Outlier Rate** | **20%** | Calculates values outside IQR fences `[Q25 - k*IQR, Q75 + k*IQR]` using nearest quantile interpolation for numeric columns (`100 - outlier_pct * 3.0`). Non-numeric/boolean columns exclude this factor and renormalize weights across remaining dimensions. |
+| **Dataset Duplicate Penalty** | **Deduction** | Applied **once** at the dataset level (`min(20.0, duplicate_pct * 0.5)`). |
 
-**`credentials.py`** — User authentication
+Grade thresholds are loaded dynamically from `config.toml` (`[grades]`):
+* **Excellent:** 85 – 100 (Green)
+* **Good:** 70 – 84 (Blue)
+* **Fair:** 50 – 69 (Yellow)
+* **Poor:** 30 – 49 (Orange)
+* **Critical:** 0 – 29 (Red)
 
 ---
 
-## 📦 Installation
+## 🛠️ Automated Remediation Behavior
+
+The remediation pipeline applies type-safe cleaning rules via Polars lazy expressions:
+
+* **Numeric Columns:** Imputes missing values using median. If a numeric column is entirely null, falls back deterministically to integer `0` or float `0.0`.
+* **Boolean Columns:** Imputes missing values with `False`.
+* **String Columns:** Imputes missing values with `"Unknown"`.
+* **Temporal Columns:** Missing value imputation is intentionally skipped for date/timestamp columns to prevent corrupting timeline sequences.
+* **IQR Outlier Clamping:** Clamps numeric outliers strictly inside lower and upper IQR fence boundaries.
+* **Duplicate Removal:** Purges duplicate rows based on full-row context or user-selected column subsets while preserving internal collision-safe audit row identity (`__dq_audit_row_id_<uuid>__`).
+* **Change-Log Tracking:** Computes mutually exclusive mutation counts (`null -> value`, `value -> different value`, `value -> null`) and dropped row counts.
+* **Clean CSV Export:** Exports clean UTF-8 CSV bytes in-memory for Streamlit download, while providing `sink_cleaned_csv()` for batch/streaming disk exports.
+
+---
+
+## 📂 Repository Directory Layout
+
+```
+📁 Data-Quality-Auditor
+ ├── app.py                   # Streamlit entry point & session orchestration
+ ├── credentials.py           # Argon2id authentication & recruiter bypass logic
+ ├── config.toml              # Scoring weights, IQR multipliers, and grade thresholds
+ ├── runtime.txt              # Streamlit Cloud Python 3.12 environment spec
+ ├── pyproject.toml           # Ruff & Pytest configuration settings
+ ├── requirements.txt         # Production dependencies
+ ├── LICENSE                  # MIT License file
+ ├── conftest.py              # Pytest environment path configuration
+ ├── src/
+ │    ├── core/               # Statistical profiler, scorer & DuckDB anomaly engine
+ │    ├── ui/                 # Streamlit UI panels (Dashboard, Charts, Login, Report Cards)
+ │    └── utils/              # Polars lazy data cleaner & remediation exporter
+ ├── data/                    # Sample dataset (sample_messy.csv)
+ └── tests/                   # Automated pytest suite (26 test cases)
+```
+
+---
+
+## 🚀 Local Setup & Installation
 
 ### Prerequisites
-- Python 3.11+
-- pip or conda
-- 500MB free disk space
+* Python 3.12 or higher
+* Git
 
-### Step 1: Clone Repository
+### Step-by-Step Instructions
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Ali-datasmith/Data-Quality-Auditor.git
+   cd Data-Quality-Auditor
+   ```
+
+2. **Create and activate a virtual environment:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   pip install ruff mypy pytest argon2-cffi
+   ```
+
+4. **Run the application:**
+   ```bash
+   streamlit run app.py
+   ```
+
+---
+
+## 🧪 Testing & Quality Checks
+
+Run local static analysis and unit tests:
+
 ```bash
-git clone https://github.com/Ali-datasmith/Data-Quality-Auditor.git
-cd Data-Quality-Auditor
-```
+# Run pytest test suite (26 tests)
+python3 -m pytest
 
-### Step 2: Create Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# or
-venv\Scripts\activate     # Windows
-```
+# Run Ruff linter
+ruff check .
 
-### Step 3: Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### Step 4: Create Missing Directories
-```bash
-mkdir -p .streamlit data
+# Run Mypy static type checker
+mypy --ignore-missing-imports app.py credentials.py src/ tests/
 ```
 
 ---
 
-## 🚀 Quick Start
+## ⚙️ Configuration Reference
 
-### 1. **Login**
-- Username: `Ali-datasmith`
-- Password: `Qx9#mK2$vL7@nR4!`
+Operational thresholds, default duplicate scope, and scoring weights are defined in `config.toml`:
 
-### 2. **Load Data**
-- **Option A:** Upload your CSV (max 200MB)
-- **Option B:** Click "Load Bundled Sample" for demo
+```toml
+[scoring]
+completeness_weight = 0.40
+uniqueness_weight = 0.20
+consistency_weight = 0.20
+outlier_weight = 0.20
 
-### 3. **View Analysis**
-- See overall quality score (0–100)
-- Review per-column metrics in table
-- Explore detected issues by severity
-- Expand column cards for deep dives
+[detection]
+outlier_iqr_multiplier = 1.5
+duplicate_subset = "all"
+max_upload_mb = 200
 
-### 4. **Clean Data**
-- Click "EXECUTE ALL FIXES"
-- Download cleaned CSV
-
-### 5. **Logout**
-- Click 🚪 LOGOUT in sidebar
-
----
-
-## 📊 Usage Guide
-
-### Quality Score Interpretation
-
-| Score | Status | Action |
-|-------|--------|--------|
-| **90–100** | 🟢 Excellent | Production-ready |
-| **70–89** | 🔵 Good | Monitor closely |
-| **50–69** | 🟡 Fair | Schedule cleanup |
-| **30–49** | 🟠 Poor | Urgent remediation |
-| **0–29** | 🔴 Critical | Immediate action |
-
-### Scoring Formula
-
-```
-Quality Score = 
-  (30% × Completeness) +
-  (20% × Uniqueness) +
-  (30% × Consistency) +
-  (20% × Outlier Rate) -
-  (Duplicate Penalty)
-```
-
-**Per-Dimension Calculation:**
-- **Completeness:** `100 - (missing% × 1.0)`
-- **Uniqueness:** Context-aware (ID vs categorical)
-- **Consistency:** `100 - (type_mismatch% × 2.5)`
-- **Outlier Rate:** `100 - (outlier% × 3.0)`
-
-### Issue Severity
-
-| Severity | Threshold | Color |
-|----------|-----------|-------|
-| **Critical** | Score impact > 10pts | 🔴 Red |
-| **High** | Score impact 5–10pts | 🟠 Orange |
-| **Medium** | Score impact < 5pts | 🟡 Yellow |
-
----
-
-## 📁 Project Structure
-
-```
-Data-Quality-Auditor/
-├── app.py                      # Main Streamlit app
-├── credentials.py              # User authentication
-├── config.toml                 # Configuration (weights, thresholds)
-├── requirements.txt            # Python dependencies
-├── .streamlit/config.toml      # Streamlit theme config
-│
-├── core/                       # Data processing
-│   ├── __init__.py
-│   ├── profiler.py             # Statistical profiling
-│   └── scorer.py               # Quality scoring engine
-│
-├── ui/                         # User interface
-│   ├── __init__.py
-│   ├── login.py                # Login form (glassmorphic)
-│   ├── sidebar.py              # Upload panel
-│   ├── dashboard.py            # Main metrics view
-│   ├── charts.py               # Plotly visualizations
-│   └── report_card.py          # Column detail cards
-│
-├── utils/                      # Utilities
-│   ├── __init__.py
-│   └── cleaner.py              # Data remediation
-│
-├── data/                       # Sample datasets
-│   └── sample_messy.csv        # Demo data
-│
-└── README.md                   # This file
+[grades]
+excellent = 85
+good = 70
+fair = 50
+poor = 30
 ```
 
 ---
 
-## 🔐 Authentication
+## 🔐 Authentication & Recruiter Demo Access
 
-### Credentials
-- **Username:** `Ali-datasmith`
-- **Password:** `Qx9#mK2$vL7@nR4!` (16-char strong password)
-
-### How It Works
-1. Hash-based validation using SHA-256
-2. Session state management via Streamlit
-3. Auto-logout on app restart
-4. User badge in sidebar shows logged-in user
-
-### For Production
-Replace `credentials.py` with:
-- Database-backed user store (PostgreSQL/MongoDB)
-- `bcrypt` password hashing (not SHA-256)
-- OAuth 2.0 / SAML integration
-- Role-based access control (RBAC)
+* **Standard Auth:** Authenticates against Argon2id salted password hashes (`credentials.py`).
+* **1-Click Recruiter Demo Access:** A prominent button on the login screen (`⚡ 1-CLICK RECRUITER DEMO ACCESS`) allows instant authentication as `"Recruiter-Demo"` without typing credentials.
+* **Session Management:** Full session isolation with explicit logout support.
 
 ---
 
-## 📈 Quality Scoring Deep Dive
+## ☁️ Deployment Notes
 
-### Completeness (30%)
-Measures missing values — the percentage of NULL/NaN fields.
-```
-Completeness = 100 - (missing_count / total_rows) × 100
-```
-
-### Uniqueness (20%)
-Context-aware: high uniqueness is good for IDs, bad for categories.
-```
-If numeric:
-  - < 5% unique → 20 pts (likely all same)
-  - 5–20% unique → 60 pts
-  - > 20% unique → 85 pts (good spread)
-
-If string:
-  - > 95% unique → 65 pts (likely ID column)
-  - 60–95% unique → 80 pts
-  - 5–60% unique → 90 pts (good categorical)
-  - < 5% unique → 20 pts (nearly constant)
-```
-
-### Consistency (30%)
-Detects type mismatches, malformed dates, invalid emails.
-```
-Consistency = 100 - (mismatch_count / total_rows) × 250
-```
-
-### Outlier Rate (20%)
-IQR method: flags values > Q75 + 1.5×IQR or < Q25 - 1.5×IQR.
-```
-Outlier Rate = 100 - (outlier_count / total_rows) × 300
-Skipped for non-numeric & boolean columns
-```
-
-### Duplicate Penalty
-Each duplicate row reduces score by `min(20pts, duplicate% × 0.5)`.
+This application is ready for deployment on **Streamlit Community Cloud**:
+1. Connect repository to Streamlit Cloud.
+2. Select `app.py` as main file path.
+3. Streamlit Cloud automatically uses `runtime.txt` (Python 3.12) and installs `requirements.txt`.
 
 ---
 
-## 🚨 Advanced Features
+## 📜 License
 
-### Anomaly Detection Methods
-
-**1. IQR Outliers (Numeric)**
-```
-Q1 = 25th percentile
-Q3 = 75th percentile
-IQR = Q3 - Q1
-Lower Fence = Q1 - 1.5 × IQR
-Upper Fence = Q3 + 1.5 × IQR
-```
-
-**2. DuckDB SQL Queries**
-- Null column detection
-- All-zero column detection
-- Email regex validation
-- Date format validation
-- Mixed numeric/text patterns
-
-**3. Duplicate Detection**
-- Row-level exact matching
-- Configurable column subset
-
-### Data Cleaning Pipeline
-
-**Fix Priority:**
-1. Deduplication (highest impact)
-2. Missing value imputation
-3. Type normalization
-4. Outlier clamping
-5. Date standardization
-
-**Imputation Strategies:**
-- Numeric: `median(column)`
-- Categorical: `mode(column)`
-- Dates: `pd.to_datetime()` with coerce
-
----
-
-## 🎨 UI/UX Features
-
-### Glassmorphism Design
-- **Backdrop Filter:** `blur(20px) saturate(180%)`
-- **Transparent Base:** `rgba(255,255,255,0.04)`
-- **Border Glow:** Cyan (`#00FFFF`) with `0 0 20px radius`
-- **Scanline Overlay:** Animated subtle line sweep
-
-### Color Palette
-| Element | Color | Usage |
-|---------|-------|-------|
-| Primary Accent | `#00FFFF` | Cyan glow, titles |
-| Secondary | `#E0F7FA` | Body text |
-| Success | `#2ECC71` | Green badges |
-| Warning | `#F1C40F` | Yellow flags |
-| Error | `#E74C3C` | Red alerts |
-| Background | `#0A0E1A` | Deep navy base |
-
-### Responsive Grid
-- **4-Column Metrics** → 2-column on tablet → 1-column mobile
-- **Sidebar Collapse** → auto on screens < 768px
-- **Chart Reflow** → responsive Plotly configurations
-
----
-
-## 🐛 Bug Fixes & Improvements
-
-### v1.0 Release Fixes
-
-| Issue | Root Cause | Solution |
-|-------|----------|----------|
-| **Duplicate TOML Keys** | Config had 2 theme blocks | Merged into single block |
-| **REGEXP_MATCHES Silent Fail** | Old DuckDB syntax | Version-aware regex function selection |
-| **String Column Outlier Bonus** | `is_numeric_dtype()` returned True for booleans | Added `is_bool_dtype()` exclusion |
-| **Duplicate Rows No Penalty** | Duplicate detection worked but score ignored it | Wired `duplicate_count` into score formula |
-| **NORMALIZE_DATE on All Columns** | `"object" in dtype` matched every string | Added date-name heuristic + sample parse |
-| **Deprecated `infer_datetime_format`** | Pandas 2.2+ removed parameter | Removed param, pandas auto-infers |
-| **Text Truncation in Cards** | Long labels overflow fixed width | Shortened labels (16→8 chars) |
-| **Logout Button Delayed** | Rendered after `render_sidebar()` | Moved to sidebar rendering start |
-| **Boolean Arithmetic Crash** | IQR calculation on booleans | Added boolean type check in outlier detection |
-| **Invalid Plotly Property** | `hoverlabel` not on Indicator traces | Removed unsupported property |
-
----
-
-## 📸 Screenshots
-
-### Login Page
-[<img width="1365" height="719" alt="Screenshot 2026-06-05 11 05 31 AM" src="https://github.com/user-attachments/assets/95e5c2a2-ff89-4b99-9850-f043a71a40b4" />
-]
-
-*Enterprise authentication with glassmorphic design, neon cyan accents, and secure credential validation.*
-
-### Main Dashboard
-[<img width="1365" height="726" alt="Screenshot 2026-06-05 11 07 25 AM" src="https://github.com/user-attachments/assets/5829f48b-c09c-413a-9e36-f38f5bd4ae5b" />
-]
-
-*Real-time quality score gauge, metric cards, and per-column breakdown with issue flags.*
-
----
-
-## 🎥 Demo Video
-
-Watch the full walkthrough:
-
-[https://www.youtube.com/watch?v=vxaz9obO7jk]
-
-*Loom video showing: Login → Data Upload → Quality Analysis → Issue Detection → Data Cleaning → Export*
-
----
-
-## 🤝 Contributing
-
-### Bug Reports
-Found an issue? Open a GitHub issue with:
-- Steps to reproduce
-- Expected vs actual behavior
-- Screenshots/logs
-- Python & Streamlit versions
-
-### Feature Requests
-Suggest improvements via:
-- GitHub Discussions
-- Email: `rjptmhmmd@gmail.com`
-
-### Development Setup
-```bash
-git clone https://github.com/Ali-datasmith/Data-Quality-Auditor.git
-cd Data-Quality-Auditor
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
----
-
-## 📋 Requirements
-
-```txt
-streamlit==1.28.1
-pandas==2.2.0
-polars==0.19.16
-duckdb==0.9.1
-numpy==1.24.3
-plotly==5.18.0
-```
-
----
-
-## 📄 License
-
-MIT License — See LICENSE file for details.
-
----
-
-## 👨‍💼 About the Developer
-
-**Ali Datasmith** — Full-stack data engineer & UI specialist
-
-- 🔧 Built enterprise data quality solutions
-- 🎨 Specialist in glassmorphic UI/UX design
-- 📊 Expert in statistical analysis & anomaly detection
-- 🚀 Passionate about making complex tools simple
-
-**Contact:**
-- GitHub: [@Ali-datasmith](https://github.com/Ali-datasmith)
-- Email: rjptmhmmd@example.com
-
----
-
-## 🙏 Acknowledgments
-
-- **Streamlit** — for reactive web framework
-- **Plotly** — for interactive visualizations
-- **Pandas & DuckDB** — for data wrangling
-- **JetBrains Mono** — for monospace typography
-
----
-
-**⭐ If you find this useful, please star the repo!**
-
-**Made with ❤️ for data engineers & analysts worldwide.**
+Distributed under the [MIT License](LICENSE). Copyright (c) 2026 Ali Datasmith.
