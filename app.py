@@ -143,7 +143,8 @@ def current_runtime_audit_parameters() -> dict[str, Any]:
 
 def _analysis_fingerprint(df: pd.DataFrame, params: dict[str, Any]) -> str:
     subset_str = ",".join(sorted(params["duplicate_subset"]))
-    return f"{id(df)}_{len(df)}_{len(df.columns)}_{params['iqr_multiplier']}_{subset_str}"
+    col_str = ",".join(str(c) for c in df.columns)
+    return f"{len(df)}_{len(df.columns)}_{col_str}_{params['iqr_multiplier']}_{subset_str}"
 
 
 # ---------------------------------------------------------------------------
@@ -222,20 +223,21 @@ def build_or_get_cached_analysis(df: pd.DataFrame) -> tuple[dict[str, dict[str, 
         or st.session_state.get("analysis_fingerprint") != fingerprint
     ):
         st.session_state["cleaned_df"] = None
-        profile = _build_enriched_profile(
-            df,
-            iqr_multiplier=params["iqr_multiplier"],
-            duplicate_subset=params["duplicate_subset"],
-        )
-        col_scores = _build_column_scores(profile)
-        overall_score = score_dataframe(profile)
-        issues = generate_issue_summary(profile)
+        with st.spinner("SCANNING DATA MATRIX..."):
+            profile = _build_enriched_profile(
+                df,
+                iqr_multiplier=params["iqr_multiplier"],
+                duplicate_subset=params["duplicate_subset"],
+            )
+            col_scores = _build_column_scores(profile)
+            overall_score = score_dataframe(profile)
+            issues = generate_issue_summary(profile)
 
-        st.session_state["profile"] = profile
-        st.session_state["col_scores"] = col_scores
-        st.session_state["overall_score"] = overall_score
-        st.session_state["issues"] = issues
-        st.session_state["analysis_fingerprint"] = fingerprint
+            st.session_state["profile"] = profile
+            st.session_state["col_scores"] = col_scores
+            st.session_state["overall_score"] = overall_score
+            st.session_state["issues"] = issues
+            st.session_state["analysis_fingerprint"] = fingerprint
 
     return (
         st.session_state["profile"],
@@ -635,8 +637,7 @@ def main() -> None:
         st.markdown("---")
 
         # Run analysis once (or when sidebar parameters change) and cache in session state
-        with st.spinner("SCANNING DATA MATRIX..."):
-            profile, col_scores, overall_score, issues = build_or_get_cached_analysis(active_df)
+        profile, col_scores, overall_score, issues = build_or_get_cached_analysis(active_df)
 
         duplicate_count = dataset_duplicate_count_from_profile(profile)
 

@@ -254,9 +254,6 @@ def detect_duplicates(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, subs
             if not cols:
                 return DuplicateReport(count=0, indices=[])
 
-        if not cols:
-            return DuplicateReport(count=0, indices=[])
-
         indexed_lf = lf.with_row_index("__row_id__")
 
         dup_indices_df = (

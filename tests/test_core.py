@@ -19,6 +19,7 @@ from utils.cleaner import (
     apply_fixes,
     apply_fixes_lazy,
     generate_change_log,
+    suggest_fixes,
 )
 
 # ============================================================================
@@ -82,6 +83,64 @@ def test_iqr_outlier_calculation_bounds() -> None:
 
 
 # ============================================================================
+# Priority 4 Regression Tests
+# ============================================================================
+
+def test_audit_row_id_collision_safety() -> None:
+    df_collision = pd.DataFrame({
+        "__dq_audit_row_id__": ["user_val_1", "user_val_2", "user_val_3"],
+        "num_val": [10.0, None, 30.0],
+    })
+    fixes = [{"column": "num_val", "action_type": "FILL_MISSING"}]
+    cleaned = apply_fixes(df_collision, fixes)
+    assert "__dq_audit_row_id__" in cleaned.columns
+    assert cleaned["__dq_audit_row_id__"].to_list() == ["user_val_1", "user_val_2", "user_val_3"]
+    assert cleaned["num_val"].isna().sum() == 0
+
+
+def test_all_null_numeric_imputation() -> None:
+    lf = pl.LazyFrame({"all_null_int": [None, None, None], "all_null_float": [None, None, None]})
+    fixes = [
+        {"column": "all_null_int", "action_type": "FILL_MISSING"},
+        {"column": "all_null_float", "action_type": "FILL_MISSING"},
+    ]
+    cleaned = apply_fixes_lazy(lf, fixes).collect()
+    assert cleaned["all_null_int"].null_count() == 0
+    assert cleaned["all_null_float"].null_count() == 0
+
+
+def test_value_to_null_changelog_counting() -> None:
+    orig = pd.DataFrame({"col": ["a", "b", "c"]})
+    cleaned = pd.DataFrame({"col": ["a", None, "c"]})
+    log = generate_change_log(orig, cleaned)
+    assert log.mutations_applied["col"] == 1
+
+
+def test_temporal_missing_suggestion_exclusion() -> None:
+    profile = {
+        "date_col": {
+            "dtype": "Date",
+            "missing_count": 2,
+        },
+        "num_col": {
+            "dtype": "Float64",
+            "missing_count": 2,
+        },
+    }
+    suggestions = suggest_fixes(profile, duplicate_count=0)
+    suggested_cols = [s.column for s in suggestions]
+    assert "date_col" not in suggested_cols
+    assert "num_col" in suggested_cols
+
+
+def test_invalid_duplicate_subset_handling() -> None:
+    df = pd.DataFrame({"a": [1, 1], "b": [2, 2]})
+    report = detect_duplicates(df, subset=["non_existent_col"])
+    assert report.count == 0
+    assert report.indices == []
+
+
+# ============================================================================
 # Regression Tests from Refactoring Protocol
 # ============================================================================
 
@@ -124,12 +183,10 @@ def test_duplicate_penalty_applied_once_at_dataset_level() -> None:
             "dataset_duplicate_count": 2,
         },
     }
-        # Column scores without duplicate penalty = 97
     score1 = score_column(profile["col1"])
     score2 = score_column(profile["col2"])
     assert score1 == 97
     assert score2 == 97
-    # Dataset score applying penalty ONCE = 97 - 10 = 87
     overall = score_dataframe(profile)
     assert overall == 87
 

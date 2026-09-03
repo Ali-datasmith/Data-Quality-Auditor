@@ -1,9 +1,13 @@
 # utils/cleaner.py
 
+import re
+import uuid
 from typing import Any, NamedTuple
 
 import pandas as pd
 import polars as pl
+
+_AUDIT_ROW_ID_PATTERN = re.compile(r"^__dq_audit_row_id_[0-9a-f]{12}__$")
 
 
 class RemediationSuggestion:
@@ -76,29 +80,23 @@ def apply_fixes_lazy(
 ) -> pl.LazyFrame:
     """Applies remediation fixes lazily using Polars pl.LazyFrame with type safety and collision-safe row id tracking."""
     schema = lf.collect_schema()
-    existing_cols = schema.names()
+    existing_cols = set(schema.names())
 
-    audit_row_id = "__dq_audit_row_id__"
-    counter = 1
+    audit_row_id = f"__dq_audit_row_id_{uuid.uuid4().hex[:12]}__"
     while audit_row_id in existing_cols:
-        audit_row_id = f"__dq_audit_row_id_{counter}__"
+        audit_row_id = f"__dq_audit_row_id_{uuid.uuid4().hex[:12]}__"
 
-    if not any(c.startswith("__dq_audit_row_id") for c in existing_cols):
-        lf = lf.with_row_index(audit_row_id)
+    lf = lf.with_row_index(audit_row_id)
+    original_user_cols = [c for c in schema.names() if c != audit_row_id]
 
     drop_dups = any(fix.get("action_type") == "DROP_DUPLICATES" for fix in fixes)
     if drop_dups:
-        non_audit_cols = [c for c in schema.names() if not c.startswith("__dq_audit_row_id")]
-        lf = lf.unique(subset=non_audit_cols if non_audit_cols else None, keep="first")
+        lf = lf.unique(subset=original_user_cols if original_user_cols else None, keep="first")
 
-    updated_schema = lf.collect_schema()
-    actual_audit_col = next((c for c in updated_schema.names() if c.startswith("__dq_audit_row_id")), audit_row_id)
+    exprs: list[pl.Expr] = [pl.col(audit_row_id)]
 
-    exprs: list[pl.Expr] = [pl.col(actual_audit_col)]
-
-    for col, dtype in schema.items():
-        if col.startswith("__dq_audit_row_id"):
-            continue
+    for col in original_user_cols:
+        dtype = schema[col]
         col_expr = pl.col(col)
 
         missing_fix = next(
@@ -145,7 +143,7 @@ def apply_fixes(
     cleaned_lf = apply_fixes_lazy(lf, fixes)
     res_df = cleaned_lf.collect().to_pandas()
 
-    audit_col = next((c for c in res_df.columns if str(c).startswith("__dq_audit_row_id")), None)
+    audit_col = next((c for c in res_df.columns if _AUDIT_ROW_ID_PATTERN.match(str(c))), None)
     if audit_col:
         res_df = res_df.set_index(audit_col, drop=True)
         res_df.index.name = None
@@ -178,13 +176,13 @@ def generate_change_log(
 
 def export_cleaned_csv(cleaned_df: pd.DataFrame | pl.DataFrame) -> bytes:
     if isinstance(cleaned_df, pl.DataFrame):
-        audit_cols = [c for c in cleaned_df.columns if str(c).startswith("__dq_audit_row_id")]
+        audit_cols = [c for c in cleaned_df.columns if _AUDIT_ROW_ID_PATTERN.match(str(c))]
         if audit_cols:
             cleaned_df = cleaned_df.drop(audit_cols)
         res = cleaned_df.write_csv()
         return res.encode("utf-8") if isinstance(res, str) else res
 
-    audit_cols = [c for c in cleaned_df.columns if str(c).startswith("__dq_audit_row_id")]
+    audit_cols = [c for c in cleaned_df.columns if _AUDIT_ROW_ID_PATTERN.match(str(c))]
     if audit_cols:
         cleaned_df = cleaned_df.drop(columns=audit_cols)
     return cleaned_df.to_csv(index=False).encode("utf-8")

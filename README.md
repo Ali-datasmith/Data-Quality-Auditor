@@ -6,18 +6,18 @@
 [![Polars Engine](https://img.shields.io/badge/engine-Polars%20Lazy-FFD43B.svg)](https://pypolars.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-grade B2B Streamlit web application engineered for real-time data quality auditing, statistical profiling, anomaly detection, and automated data remediation pipelines. Powered by Python 3.12+, Polars lazy evaluation, DuckDB SQL pattern checks, and Argon2id security authentication.
+An enterprise-grade B2B Streamlit web application engineered for real-time automated data quality audits, statistical profiling, anomaly detection, and automated remediation pipelines. Powered by modern Python 3.12+ tooling, Polars lazy evaluation, DuckDB SQL pattern checks, and Argon2id security authentication.
 
 ---
 
 ## 🌟 Key Features
 
-* **⚡ Zero-Copy High-Performance Pipelines:** Ingests CSV datasets using Polars (`pl.read_csv`, `pl.scan_csv`, `pl.LazyFrame`) for low memory footprint and high processing speed.
-* **🔐 Enterprise Argon2 Authentication:** Secure password hashing using `argon2-cffi` (`Argon2id` with key-stretched PBKDF2 fallback) and a **1-Click Recruiter Demo Access** bypass.
-* **📊 Multi-Dimensional Data Quality Scoring (0–100):** Comprehensive weighted algorithm assessing completeness, uniqueness, type consistency, outlier rates, and dataset-level duplicate penalties.
-* **🔎 DuckDB Pattern Anomaly Detection:** In-memory SQL pattern recognition verifying regex emails, multi-format timestamps, and string/numeric pattern mismatches.
-* **🛠️ Automated Data Remediation:** Type-safe missing value imputation, IQR variance outlier clamping, duplicate row purging, change-log mutation tracking, and clean CSV export.
-* **🛡️ Production Quality Gates:** Fully type-hinted under Python 3.12+ syntax, verified with `mypy`, linted with `ruff`, and validated via `pytest`.
+* **⚡ Fast Data Ingestion & Lazy Evaluation:** Ingests CSV datasets using Polars (`pl.read_csv`, `pl.scan_csv`, `pl.LazyFrame`) for fast parsing and low-memory statistical profiling.
+* **🔐 Enterprise Argon2 Authentication:** Secure password hashing using `argon2-cffi` (`Argon2id` with key-stretched PBKDF2 fallback) and a **1-Click Recruiter Demo Access** bypass button.
+* **📊 Multi-Dimensional Data Quality Scoring (0–100):** Algorithmic scoring model assessing completeness, uniqueness, type consistency, outlier rates, and a single dataset-level duplicate penalty.
+* **🔎 DuckDB Pattern Anomaly Detection:** In-memory SQL pattern checks verifying regex emails, multi-format timestamps, and string/numeric pattern mismatches.
+* **🛠️ Automated Data Remediation:** Type-safe missing value imputation, IQR variance outlier clamping, duplicate row purging, mutation change-log tracking, and clean CSV export.
+* **🛡️ Production Quality Gates:** Type-hinted under Python 3.12+ syntax, verified with `mypy`, linted via `ruff`, and validated via `pytest` (26 test cases).
 
 ---
 
@@ -33,7 +33,7 @@ graph TD
     E --> F
     F --> G[Glassmorphic Streamlit Dashboard UI]
     G --> H[Type-Safe Remediation Pipeline]
-    H -->|Polars Export / sink_csv| I[Audited Clean CSV Download]
+    H -->|Polars Export / In-Memory Download| I[Audited Clean CSV Download]
 ```
 
 ---
@@ -45,12 +45,12 @@ The dataset quality index (0–100) evaluates statistical metrics against config
 | Metric Dimension | Default Weight | Assessment Logic & Calculation |
 | :--- | :---: | :--- |
 | **Completeness** | **40%** | `100 - (missing_count / total_rows * 100)`. Penalizes blank or null fields. |
-| **Uniqueness** | **20%** | Context-aware cardinality ratio (`unique_count / total_rows`). Evaluates value distribution for categorical vs ID fields. |
+| **Uniqueness** | **20%** | Context-aware cardinality ratio (`null_excluded_unique_count / total_rows`). Evaluates value distribution for categorical vs ID fields. |
 | **Type Consistency** | **20%** | Evaluates DuckDB structural type mismatches (`100 - mismatch_pct * 2.5`). |
-| **Outlier Rate** | **20%** | Calculates values outside IQR fences `[Q25 - k*IQR, Q75 + k*IQR]` for numeric columns (`100 - outlier_pct * 3.0`). Non-numeric/boolean columns exclude this factor and renormalize weights across remaining dimensions. |
+| **Outlier Rate** | **20%** | Calculates values outside IQR fences `[Q25 - k*IQR, Q75 + k*IQR]` using nearest quantile interpolation for numeric columns (`100 - outlier_pct * 3.0`). Non-numeric/boolean columns exclude this factor and renormalize weights across remaining dimensions. |
 | **Dataset Duplicate Penalty** | **Deduction** | Applied **once** at the dataset level (`min(20.0, duplicate_pct * 0.5)`). |
 
-Grade categories are mapped dynamically from `config.toml` (`[grades]`):
+Grade thresholds are loaded dynamically from `config.toml` (`[grades]`):
 * **Excellent:** 85 – 100 (Green)
 * **Good:** 70 – 84 (Blue)
 * **Fair:** 50 – 69 (Yellow)
@@ -61,16 +61,16 @@ Grade categories are mapped dynamically from `config.toml` (`[grades]`):
 
 ## 🛠️ Automated Remediation Behavior
 
-The 1-click remediation pipeline applies type-safe cleaning rules via Polars lazy expressions:
+The remediation pipeline applies type-safe cleaning rules via Polars lazy expressions:
 
-* **Numeric Columns:** Imputes missing values using median. If a numeric column is entirely null, falls back deterministically to `0` (integers) or `0.0` (floats).
+* **Numeric Columns:** Imputes missing values using median. If a numeric column is entirely null, falls back deterministically to integer `0` or float `0.0`.
 * **Boolean Columns:** Imputes missing values with `False`.
 * **String Columns:** Imputes missing values with `"Unknown"`.
 * **Temporal Columns:** Missing value imputation is intentionally skipped for date/timestamp columns to prevent corrupting timeline sequences.
 * **IQR Outlier Clamping:** Clamps numeric outliers strictly inside lower and upper IQR fence boundaries.
-* **Duplicate Removal:** Purges duplicate rows based on full-row context or user-selected column subsets while preserving internal audit row identity.
+* **Duplicate Removal:** Purges duplicate rows based on full-row context or user-selected column subsets while preserving internal collision-safe audit row identity (`__dq_audit_row_id_<uuid>__`).
 * **Change-Log Tracking:** Computes mutually exclusive mutation counts (`null -> value`, `value -> different value`, `value -> null`) and dropped row counts.
-* **Clean CSV Export:** Generates clean UTF-8 CSV exports from Pandas/Polars DataFrames or streams directly via `sink_csv`.
+* **Clean CSV Export:** Exports clean UTF-8 CSV bytes in-memory for Streamlit download, while providing `sink_cleaned_csv()` for batch/streaming disk exports.
 
 ---
 
@@ -87,11 +87,11 @@ The 1-click remediation pipeline applies type-safe cleaning rules via Polars laz
  ├── LICENSE                  # MIT License file
  ├── conftest.py              # Pytest environment path configuration
  ├── src/
- │    ├── core/               # Profiler engine, Scorer model, and DuckDB anomaly checks
+ │    ├── core/               # Statistical profiler, scorer & DuckDB anomaly engine
  │    ├── ui/                 # Streamlit UI panels (Dashboard, Charts, Login, Report Cards)
  │    └── utils/              # Polars lazy data cleaner & remediation exporter
  ├── data/                    # Sample dataset (sample_messy.csv)
- └── tests/                   # Automated pytest suite (18 test cases)
+ └── tests/                   # Automated pytest suite (26 test cases)
 ```
 
 ---
@@ -134,7 +134,7 @@ The 1-click remediation pipeline applies type-safe cleaning rules via Polars laz
 Run local static analysis and unit tests:
 
 ```bash
-# Run pytest test suite (18 tests)
+# Run pytest test suite (26 tests)
 python3 -m pytest
 
 # Run Ruff linter
@@ -148,7 +148,7 @@ mypy --ignore-missing-imports app.py credentials.py src/ tests/
 
 ## ⚙️ Configuration Reference
 
-Operational thresholds and scoring weights are configured in `config.toml`:
+Operational thresholds, default duplicate scope, and scoring weights are defined in `config.toml`:
 
 ```toml
 [scoring]
