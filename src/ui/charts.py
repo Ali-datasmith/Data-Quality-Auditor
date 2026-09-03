@@ -45,8 +45,19 @@ def load_ui_charts_config() -> UIChartsAppConfig:
         config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
-    except FileNotFoundError as e:
-        raise UIChartsConfigLoadError(f"Configuration file mapping missing: {e}")
+    except FileNotFoundError:
+        return {
+            "scoring": {
+                "completeness_weight": 0.30,
+                "uniqueness_weight":   0.20,
+                "consistency_weight":  0.30,
+                "outlier_weight":      0.20,
+            },
+            "detection": {
+                "outlier_iqr_multiplier": 1.5,
+                "max_upload_mb": 200,
+            },
+        }
     except tomllib.TOMLDecodeError as e:
         raise UIChartsConfigLoadError(f"Malformed configuration syntax execution: {e}")
 

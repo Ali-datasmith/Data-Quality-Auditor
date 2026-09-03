@@ -166,10 +166,14 @@ def _build_enriched_profile(
         for col_name, col_profile in raw_profile.items():
             outlier_report = detect_outliers(df, col_name, iqr_multiplier=iqr_multiplier)
 
-            # Sum affected_rows from type mismatch reports
-            mismatch_count = sum(
-                int(m.get("affected_rows", 0)) for m in anomaly_report.type_mismatches
-                if m.get("column") == col_name
+            # Sum affected_rows from type mismatch reports and cap at total_rows
+            mismatch_count = min(
+                total_rows,
+                sum(
+                    int(m.get("affected_rows", 0))
+                    for m in anomaly_report.type_mismatches
+                    if m.get("column") == col_name
+                ),
             )
             enriched[col_name] = {
                 "dtype":                    col_profile.dtype,
@@ -217,6 +221,7 @@ def build_or_get_cached_analysis(df: pd.DataFrame) -> tuple[dict[str, dict[str, 
         st.session_state.get("profile") is None
         or st.session_state.get("analysis_fingerprint") != fingerprint
     ):
+        st.session_state["cleaned_df"] = None
         profile = _build_enriched_profile(
             df,
             iqr_multiplier=params["iqr_multiplier"],

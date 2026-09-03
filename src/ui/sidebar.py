@@ -127,6 +127,7 @@ def render_sidebar() -> pd.DataFrame | None:
                     st.sidebar.error(f"File size exceeds max allowed limit of {_MAX_SIZE_MB} MB.")
                 else:
                     try:
+                        uploaded_file.seek(0)
                         active_df = pl.read_csv(
                             uploaded_file,
                             infer_schema_length=10000,

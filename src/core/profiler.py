@@ -245,12 +245,19 @@ def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> di
 def detect_duplicates(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, subset: list[str] | None = None) -> DuplicateReport:
     try:
         lf = _get_lazyframe(df_or_lf)
+        schema_names = list(lf.collect_schema().names())
 
-        indexed_lf = lf.with_row_index("__row_id__")
+        if subset is None or len(subset) == 0:
+            cols = schema_names
+        else:
+            cols = [c for c in subset if c in schema_names]
+            if not cols:
+                return DuplicateReport(count=0, indices=[])
 
-        cols = subset if subset else [c for c in lf.collect_schema().names()]
         if not cols:
             return DuplicateReport(count=0, indices=[])
+
+        indexed_lf = lf.with_row_index("__row_id__")
 
         dup_indices_df = (
             indexed_lf.with_columns(

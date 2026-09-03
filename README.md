@@ -1,45 +1,76 @@
-# 🛡️ Enterprise Data Quality Auditor
+# 🛡️ Data Quality Auditor
 
 [![Build Status](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml)
 [![CodeQL Security Analysis](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
 [![Polars Engine](https://img.shields.io/badge/engine-Polars%20Lazy-FFD43B.svg)](https://pypolars.org/)
-[![Streamlit Cloud](https://img.shields.io/badge/Streamlit%20Cloud-Live%20Demo-FF4B4B.svg)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An enterprise-grade B2B Streamlit web application engineered for real-time automated data quality audits, anomaly detection, statistical profiling, and automated remediation pipelines. Powered by modern Python 3.12+ tooling, zero-copy Polars lazy execution, DuckDB SQL pattern checks, and Argon2 security authentication.
+An enterprise-grade B2B Streamlit web application engineered for real-time data quality auditing, statistical profiling, anomaly detection, and automated data remediation pipelines. Powered by Python 3.12+, Polars lazy evaluation, DuckDB SQL pattern checks, and Argon2id security authentication.
 
 ---
 
-## 🌟 Key Architecture & Highlights
+## 🌟 Key Features
 
-* **📁 Clean `src/` Directory Layout:** Structured for enterprise maintainability with modular subpackages (`src/core/`, `src/ui/`, `src/utils/`) dynamically linked via top-level `sys.path`.
-* **⚡ Zero-Copy High-Performance Engine:** Built entirely on **Polars Lazy Evaluation** (`pl.scan_csv`, `pl.LazyFrame`, `.lazy()`) to eliminate memory bottlenecks and support streaming pipeline execution.
-* **🔐 Enterprise Argon2 Authentication:** Hashing and credential validation powered by `argon2-cffi` (`Argon2id`), featuring a dedicated **1-Click Recruiter Demo Bypass** for friction-free evaluation.
-* **📊 Multi-Dimensional Quality Scoring (0–100):** Weighted algorithmic scoring model assessing:
-  * **Completeness:** Null/missing ratio calculations.
-  * **Uniqueness:** Categorical vs identifier cardinality analysis.
-  * **Type Consistency:** DuckDB-powered pattern recognition (regex emails, timestamps, string/numeric mismatches).
-  * **Outlier Rate:** IQR fence boundary statistical variance checks (excludes non-numeric/boolean types).
-  * **Duplicate Penalties:** Multi-column index duplicity tracking.
-* **🛠️ Automated Remediation Pipeline:** 1-Click execution of data cleaning routines (median/mode imputation, IQR outlier clamping, deduplication) with change-log tracking and streaming CSV exports (`sink_csv`).
-* **🛡️ Zero-Defect Quality Gates:** Fully type-hinted under Python 3.12+ typing standards, verified with `mypy` strict modes, linted via `ruff`, and tested with `pytest`.
+* **⚡ Zero-Copy High-Performance Pipelines:** Ingests CSV datasets using Polars (`pl.read_csv`, `pl.scan_csv`, `pl.LazyFrame`) for low memory footprint and high processing speed.
+* **🔐 Enterprise Argon2 Authentication:** Secure password hashing using `argon2-cffi` (`Argon2id` with key-stretched PBKDF2 fallback) and a **1-Click Recruiter Demo Access** bypass.
+* **📊 Multi-Dimensional Data Quality Scoring (0–100):** Comprehensive weighted algorithm assessing completeness, uniqueness, type consistency, outlier rates, and dataset-level duplicate penalties.
+* **🔎 DuckDB Pattern Anomaly Detection:** In-memory SQL pattern recognition verifying regex emails, multi-format timestamps, and string/numeric pattern mismatches.
+* **🛠️ Automated Data Remediation:** Type-safe missing value imputation, IQR variance outlier clamping, duplicate row purging, change-log mutation tracking, and clean CSV export.
+* **🛡️ Production Quality Gates:** Fully type-hinted under Python 3.12+ syntax, verified with `mypy`, linted with `ruff`, and validated via `pytest`.
 
 ---
 
-## 🏛️ System Architecture Workflow
+## 🏛️ Architecture Overview
 
 ```mermaid
 graph TD
-    A[User CSV Stream / Ingestion] -->|pl.scan_csv / Lazy Evaluation| B[Polars Profiling Engine]
-    B --> C[DuckDB SQL Pattern Anomaly Detection]
-    B --> D[IQR Outlier Variance Bounds Calculation]
-    C --> E[Multi-Dimensional Quality Scorer]
-    D --> E
-    E --> F[Glassmorphic Streamlit Dashboard UI]
-    F --> G[Automated Lazy Remediation Pipeline]
-    G -->|sink_csv| H[Cleaned CSV Export]
+    A[User CSV Upload / Sample Ingestion] -->|Polars pl.read_csv| B[Data Ingestion Layer]
+    B --> C[Polars LazyFrame Profiling Engine]
+    C --> D[DuckDB SQL Pattern Anomaly Analysis]
+    C --> E[IQR Outlier Variance Bounds Engine]
+    D --> F[Multi-Dimensional Quality Scorer]
+    E --> F
+    F --> G[Glassmorphic Streamlit Dashboard UI]
+    G --> H[Type-Safe Remediation Pipeline]
+    H -->|Polars Export / sink_csv| I[Audited Clean CSV Download]
 ```
+
+---
+
+## 📊 Data Quality Scoring Model
+
+The dataset quality index (0–100) evaluates statistical metrics against configurable weights defined in `config.toml`:
+
+| Metric Dimension | Default Weight | Assessment Logic & Calculation |
+| :--- | :---: | :--- |
+| **Completeness** | **40%** | `100 - (missing_count / total_rows * 100)`. Penalizes blank or null fields. |
+| **Uniqueness** | **20%** | Context-aware cardinality ratio (`unique_count / total_rows`). Evaluates value distribution for categorical vs ID fields. |
+| **Type Consistency** | **20%** | Evaluates DuckDB structural type mismatches (`100 - mismatch_pct * 2.5`). |
+| **Outlier Rate** | **20%** | Calculates values outside IQR fences `[Q25 - k*IQR, Q75 + k*IQR]` for numeric columns (`100 - outlier_pct * 3.0`). Non-numeric/boolean columns exclude this factor and renormalize weights across remaining dimensions. |
+| **Dataset Duplicate Penalty** | **Deduction** | Applied **once** at the dataset level (`min(20.0, duplicate_pct * 0.5)`). |
+
+Grade categories are mapped dynamically from `config.toml` (`[grades]`):
+* **Excellent:** 85 – 100 (Green)
+* **Good:** 70 – 84 (Blue)
+* **Fair:** 50 – 69 (Yellow)
+* **Poor:** 30 – 49 (Orange)
+* **Critical:** 0 – 29 (Red)
+
+---
+
+## 🛠️ Automated Remediation Behavior
+
+The 1-click remediation pipeline applies type-safe cleaning rules via Polars lazy expressions:
+
+* **Numeric Columns:** Imputes missing values using median. If a numeric column is entirely null, falls back deterministically to `0` (integers) or `0.0` (floats).
+* **Boolean Columns:** Imputes missing values with `False`.
+* **String Columns:** Imputes missing values with `"Unknown"`.
+* **Temporal Columns:** Missing value imputation is intentionally skipped for date/timestamp columns to prevent corrupting timeline sequences.
+* **IQR Outlier Clamping:** Clamps numeric outliers strictly inside lower and upper IQR fence boundaries.
+* **Duplicate Removal:** Purges duplicate rows based on full-row context or user-selected column subsets while preserving internal audit row identity.
+* **Change-Log Tracking:** Computes mutually exclusive mutation counts (`null -> value`, `value -> different value`, `value -> null`) and dropped row counts.
+* **Clean CSV Export:** Generates clean UTF-8 CSV exports from Pandas/Polars DataFrames or streams directly via `sink_csv`.
 
 ---
 
@@ -47,29 +78,31 @@ graph TD
 
 ```
 📁 Data-Quality-Auditor
- ├── app.py                   # Streamlit entry point (configures sys.path)
- ├── credentials.py           # Argon2id authentication & recruiter bypass
- ├── config.toml              # Scoring weights & detection parameters
- ├── runtime.txt              # Python 3.12 environment specification
- ├── pyproject.toml           # Ruff & Pytest configuration
+ ├── app.py                   # Streamlit entry point & session orchestration
+ ├── credentials.py           # Argon2id authentication & recruiter bypass logic
+ ├── config.toml              # Scoring weights, IQR multipliers, and grade thresholds
+ ├── runtime.txt              # Streamlit Cloud Python 3.12 environment spec
+ ├── pyproject.toml           # Ruff & Pytest configuration settings
  ├── requirements.txt         # Production dependencies
+ ├── LICENSE                  # MIT License file
+ ├── conftest.py              # Pytest environment path configuration
  ├── src/
- │    ├── core/               # Statistical profiler, scorer & DuckDB anomaly engine
- │    ├── ui/                 # Glassmorphic UI dashboard, charts, report cards, sidebar
+ │    ├── core/               # Profiler engine, Scorer model, and DuckDB anomaly checks
+ │    ├── ui/                 # Streamlit UI panels (Dashboard, Charts, Login, Report Cards)
  │    └── utils/              # Polars lazy data cleaner & remediation exporter
- ├── data/                    # Sample messy dataset
- └── tests/                   # Pytest automated test suite
+ ├── data/                    # Sample dataset (sample_messy.csv)
+ └── tests/                   # Automated pytest suite (18 test cases)
 ```
 
 ---
 
-## 🚀 Quick Start & Local Setup
+## 🚀 Local Setup & Installation
 
 ### Prerequisites
 * Python 3.12 or higher
 * Git
 
-### Installation
+### Step-by-Step Instructions
 
 1. **Clone the repository:**
    ```bash
@@ -83,26 +116,26 @@ graph TD
    source venv/bin/activate
    ```
 
-3. **Install production & development dependencies:**
+3. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    pip install ruff mypy pytest argon2-cffi
    ```
 
-4. **Launch the Streamlit App:**
+4. **Run the application:**
    ```bash
    streamlit run app.py
    ```
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## 🧪 Testing & Quality Checks
 
-Run the automated test suite and static type analysis locally:
+Run local static analysis and unit tests:
 
 ```bash
-# Run pytest suite
-python -m pytest
+# Run pytest test suite (18 tests)
+python3 -m pytest
 
 # Run Ruff linter
 ruff check .
@@ -113,17 +146,48 @@ mypy --ignore-missing-imports app.py credentials.py src/ tests/
 
 ---
 
-## ☁️ Streamlit Community Cloud Deployment
+## ⚙️ Configuration Reference
 
-This repository is optimized for deployment on **Streamlit Community Cloud**:
-1. Fork or push this repository to GitHub.
-2. Connect your repository to Streamlit Community Cloud.
-3. Set the main file path to `app.py`.
-4. Streamlit will recognize `runtime.txt` and install packages from `requirements.txt`.
-5. Deploy!
+Operational thresholds and scoring weights are configured in `config.toml`:
+
+```toml
+[scoring]
+completeness_weight = 0.40
+uniqueness_weight = 0.20
+consistency_weight = 0.20
+outlier_weight = 0.20
+
+[detection]
+outlier_iqr_multiplier = 1.5
+duplicate_subset = "all"
+max_upload_mb = 200
+
+[grades]
+excellent = 85
+good = 70
+fair = 50
+poor = 30
+```
+
+---
+
+## 🔐 Authentication & Recruiter Demo Access
+
+* **Standard Auth:** Authenticates against Argon2id salted password hashes (`credentials.py`).
+* **1-Click Recruiter Demo Access:** A prominent button on the login screen (`⚡ 1-CLICK RECRUITER DEMO ACCESS`) allows instant authentication as `"Recruiter-Demo"` without typing credentials.
+* **Session Management:** Full session isolation with explicit logout support.
+
+---
+
+## ☁️ Deployment Notes
+
+This application is ready for deployment on **Streamlit Community Cloud**:
+1. Connect repository to Streamlit Cloud.
+2. Select `app.py` as main file path.
+3. Streamlit Cloud automatically uses `runtime.txt` (Python 3.12) and installs `requirements.txt`.
 
 ---
 
 ## 📜 License
 
-This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.
+Distributed under the [MIT License](LICENSE). Copyright (c) 2026 Ali Datasmith.

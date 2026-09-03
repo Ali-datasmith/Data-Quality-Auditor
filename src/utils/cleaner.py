@@ -43,7 +43,12 @@ def suggest_fixes(
         ))
 
     for col, stats in profile.items():
-        if stats.get("missing_count", 0) > 0:
+        dtype_str = str(stats.get("dtype", "")).lower()
+        is_temporal = any(
+            token in dtype_str
+            for token in ("date", "datetime", "time", "duration", "timestamp")
+        )
+        if stats.get("missing_count", 0) > 0 and not is_temporal:
             suggestions.append(RemediationSuggestion(
                 column=col,
                 action_type="FILL_MISSING",
@@ -69,22 +74,30 @@ def apply_fixes_lazy(
     lf: pl.LazyFrame,
     fixes: list[dict[str, Any]],
 ) -> pl.LazyFrame:
-    """Applies remediation fixes lazily using Polars pl.LazyFrame with type safety and row id tracking."""
+    """Applies remediation fixes lazily using Polars pl.LazyFrame with type safety and collision-safe row id tracking."""
     schema = lf.collect_schema()
+    existing_cols = schema.names()
 
-    # Inject __dq_audit_row_id__ if not already present
-    if "__dq_audit_row_id__" not in schema.names():
-        lf = lf.with_row_index("__dq_audit_row_id__")
+    audit_row_id = "__dq_audit_row_id__"
+    counter = 1
+    while audit_row_id in existing_cols:
+        audit_row_id = f"__dq_audit_row_id_{counter}__"
+
+    if not any(c.startswith("__dq_audit_row_id") for c in existing_cols):
+        lf = lf.with_row_index(audit_row_id)
 
     drop_dups = any(fix.get("action_type") == "DROP_DUPLICATES" for fix in fixes)
     if drop_dups:
-        non_audit_cols = [c for c in schema.names() if c != "__dq_audit_row_id__"]
+        non_audit_cols = [c for c in schema.names() if not c.startswith("__dq_audit_row_id")]
         lf = lf.unique(subset=non_audit_cols if non_audit_cols else None, keep="first")
 
-    exprs: list[pl.Expr] = [pl.col("__dq_audit_row_id__")]
+    updated_schema = lf.collect_schema()
+    actual_audit_col = next((c for c in updated_schema.names() if c.startswith("__dq_audit_row_id")), audit_row_id)
+
+    exprs: list[pl.Expr] = [pl.col(actual_audit_col)]
 
     for col, dtype in schema.items():
-        if col == "__dq_audit_row_id__":
+        if col.startswith("__dq_audit_row_id"):
             continue
         col_expr = pl.col(col)
 
@@ -94,11 +107,12 @@ def apply_fixes_lazy(
         )
         if missing_fix:
             if dtype.is_numeric() and dtype != pl.Boolean:
-                col_expr = col_expr.fill_null(pl.col(col).median())
+                fallback_lit = pl.lit(0) if dtype.is_integer() else pl.lit(0.0)
+                col_expr = col_expr.fill_null(pl.col(col).median()).fill_null(fallback_lit)
             elif dtype == pl.Boolean:
                 col_expr = col_expr.fill_null(pl.lit(False))
             elif dtype.is_temporal():
-                pass  # Do not apply unsafe string fills to temporal types
+                pass
             else:
                 col_expr = col_expr.fill_null(pl.lit("Unknown"))
 
@@ -122,22 +136,20 @@ def apply_fixes(
     df: pd.DataFrame | pl.DataFrame,
     fixes: list[dict[str, Any]],
 ) -> pd.DataFrame:
-    """Eager wrapper that uses Polars lazy execution internally."""
+    """Eager wrapper that uses Polars lazy execution internally and preserves audit row identity."""
     if isinstance(df, pd.DataFrame):
         lf = pl.from_pandas(df).lazy()
-        cleaned_lf = apply_fixes_lazy(lf, fixes)
-        res_df = cleaned_lf.collect().to_pandas()
-        if "__dq_audit_row_id__" in res_df.columns:
-            res_df = res_df.set_index("__dq_audit_row_id__", drop=True)
-            res_df.index.name = None
-        return res_df
+    else:
+        lf = df.lazy()
 
-    lf = df.lazy()
     cleaned_lf = apply_fixes_lazy(lf, fixes)
-    res_pl = cleaned_lf.collect()
-    if "__dq_audit_row_id__" in res_pl.columns:
-        res_pl = res_pl.drop("__dq_audit_row_id__")
-    return res_pl.to_pandas()
+    res_df = cleaned_lf.collect().to_pandas()
+
+    audit_col = next((c for c in res_df.columns if str(c).startswith("__dq_audit_row_id")), None)
+    if audit_col:
+        res_df = res_df.set_index(audit_col, drop=True)
+        res_df.index.name = None
+    return res_df
 
 
 def generate_change_log(
@@ -153,11 +165,11 @@ def generate_change_log(
             orig_vals = active_df.loc[common_idx, col]
             clean_vals = cleaned.loc[common_idx, col]
 
-            # Mutually exclusive mutation masks
             filled_mask = orig_vals.isna() & clean_vals.notna()
             modified_mask = orig_vals.notna() & clean_vals.notna() & (orig_vals != clean_vals)
+            nullified_mask = orig_vals.notna() & clean_vals.isna()
 
-            mutations[col] = int(filled_mask.sum() + modified_mask.sum())
+            mutations[col] = int((filled_mask | modified_mask | nullified_mask).sum())
         else:
             mutations[col] = 0
 
@@ -166,8 +178,15 @@ def generate_change_log(
 
 def export_cleaned_csv(cleaned_df: pd.DataFrame | pl.DataFrame) -> bytes:
     if isinstance(cleaned_df, pl.DataFrame):
+        audit_cols = [c for c in cleaned_df.columns if str(c).startswith("__dq_audit_row_id")]
+        if audit_cols:
+            cleaned_df = cleaned_df.drop(audit_cols)
         res = cleaned_df.write_csv()
         return res.encode("utf-8") if isinstance(res, str) else res
+
+    audit_cols = [c for c in cleaned_df.columns if str(c).startswith("__dq_audit_row_id")]
+    if audit_cols:
+        cleaned_df = cleaned_df.drop(columns=audit_cols)
     return cleaned_df.to_csv(index=False).encode("utf-8")
 
 

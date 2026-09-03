@@ -268,10 +268,21 @@ def generate_issue_summary(profile: dict[str, dict[str, Any]]) -> list[QualityIs
                 description=f"Dataset contains {dataset_dup_cnt} duplicate rows ({duplicate_pct:.2f}% of total).",
             ))
 
+        total_w = _W_COMPLETENESS + _W_UNIQUENESS + _W_CONSISTENCY
+        if total_w == 0:
+            total_w = 1.0
+
+        w_completeness_non_numeric = _W_COMPLETENESS / total_w
+        w_consistency_non_numeric = _W_CONSISTENCY / total_w
+
         for col_name, stats in profile.items():
+            dtype = str(stats.get("dtype", ""))
+            is_numeric = _is_numeric_dtype(dtype)
+
             missing_pct = float(stats.get("missing_percentage", 0.0))
             if missing_pct > 0.0:
-                impact = missing_pct * _W_COMPLETENESS
+                comp_w = _W_COMPLETENESS if is_numeric else w_completeness_non_numeric
+                impact = missing_pct * comp_w
                 severity = (
                     "Critical" if missing_pct > 30.0
                     else "High" if missing_pct > 10.0
@@ -288,7 +299,8 @@ def generate_issue_summary(profile: dict[str, dict[str, Any]]) -> list[QualityIs
             mismatch_cnt = int(stats.get("mismatch_count", 0))
             if mismatch_cnt > 0:
                 mismatch_pct = (mismatch_cnt / total_rows) * 100.0
-                impact = mismatch_pct * _W_CONSISTENCY
+                cons_w = _W_CONSISTENCY if is_numeric else w_consistency_non_numeric
+                impact = mismatch_pct * cons_w
                 severity = "High" if mismatch_pct > 15.0 else "Medium"
                 issues_list.append(QualityIssue(
                     column=col_name,
@@ -299,8 +311,6 @@ def generate_issue_summary(profile: dict[str, dict[str, Any]]) -> list[QualityIs
                 ))
 
             outlier_cnt = int(stats.get("outlier_count", 0))
-            dtype = str(stats.get("dtype", ""))
-            is_numeric = _is_numeric_dtype(dtype)
             if outlier_cnt > 0 and is_numeric:
                 outlier_pct = (outlier_cnt / total_rows) * 100.0
                 impact = outlier_pct * _W_OUTLIER
