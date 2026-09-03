@@ -82,6 +82,59 @@ def test_iqr_outlier_calculation_bounds() -> None:
 
 
 # ============================================================================
+# Regression Tests from Refactoring Protocol
+# ============================================================================
+
+def test_change_log_counts_filled_values_once() -> None:
+    active_df = pd.DataFrame({"col1": [1.0, None, 3.0], "col2": ["a", "b", None]})
+    cleaned_df = pd.DataFrame({"col1": [1.0, 2.0, 3.0], "col2": ["a", "b", "Unknown"]})
+    log = generate_change_log(active_df, cleaned_df)
+    assert log.mutations_applied["col1"] == 1
+    assert log.mutations_applied["col2"] == 1
+
+
+def test_apply_fixes_lazy_boolean_fill_is_type_safe() -> None:
+    lf = pl.LazyFrame({"bool_col": [True, None, False]})
+    fixes = [{"column": "bool_col", "action_type": "FILL_MISSING"}]
+    cleaned_lf = apply_fixes_lazy(lf, fixes)
+    res = cleaned_lf.collect()
+    assert res["bool_col"].dtype == pl.Boolean
+    assert res["bool_col"].null_count() == 0
+    assert res["bool_col"].to_list() == [True, False, False]
+
+
+def test_duplicate_penalty_applied_once_at_dataset_level() -> None:
+    profile = {
+        "col1": {
+            "dtype": "Float64",
+            "missing_count": 0,
+            "unique_count": 10,
+            "outlier_count": 0,
+            "mismatch_count": 0,
+            "total_rows": 10,
+            "dataset_duplicate_count": 2,  # 20% duplicates -> penalty = min(20, 20*0.5) = 10 points
+        },
+        "col2": {
+            "dtype": "Float64",
+            "missing_count": 0,
+            "unique_count": 10,
+            "outlier_count": 0,
+            "mismatch_count": 0,
+            "total_rows": 10,
+            "dataset_duplicate_count": 2,
+        },
+    }
+        # Column scores without duplicate penalty = 97
+    score1 = score_column(profile["col1"])
+    score2 = score_column(profile["col2"])
+    assert score1 == 97
+    assert score2 == 97
+    # Dataset score applying penalty ONCE = 97 - 10 = 87
+    overall = score_dataframe(profile)
+    assert overall == 87
+
+
+# ============================================================================
 # Profiler & Polars Lazy Tests
 # ============================================================================
 
@@ -101,7 +154,8 @@ def test_generate_profile_lazy(sample_df: pd.DataFrame) -> None:
 
     num_p = profile["num_col"]
     assert num_p.missing_count == 1
-    assert num_p.unique_count == 5
+    # Null values are excluded from unique_count: 10.0, 12.0, 11.0, 100.0 = 4
+    assert num_p.unique_count == 4
 
 
 def test_detect_duplicates_lazy(sample_df: pd.DataFrame) -> None:

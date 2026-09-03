@@ -89,9 +89,9 @@ def load_app_config() -> AppConfig:
     except FileNotFoundError:
         return {
             "scoring": {
-                "completeness_weight": 0.30,
+                "completeness_weight": 0.40,
                 "uniqueness_weight":   0.20,
-                "consistency_weight":  0.30,
+                "consistency_weight":  0.20,
                 "outlier_weight":      0.20,
             },
             "detection": {
@@ -123,6 +123,9 @@ def initialize_session_state() -> None:
             "col_scores":    None,
             "overall_score": None,
             "issues":        None,
+            "outlier_iqr_multiplier": 1.5,
+            "deduplication_subset_keys": [],
+            "analysis_fingerprint": None,
         }
         for key, val in defaults.items():
             if key not in st.session_state:
@@ -131,42 +134,61 @@ def initialize_session_state() -> None:
         raise OrchestrationError(f"Session state initialization failure: {e}")
 
 
+def current_runtime_audit_parameters() -> dict[str, Any]:
+    return {
+        "iqr_multiplier": float(st.session_state.get("outlier_iqr_multiplier", 1.5)),
+        "duplicate_subset": list(st.session_state.get("deduplication_subset_keys", [])),
+    }
+
+
+def _analysis_fingerprint(df: pd.DataFrame, params: dict[str, Any]) -> str:
+    subset_str = ",".join(sorted(params["duplicate_subset"]))
+    return f"{id(df)}_{len(df)}_{len(df.columns)}_{params['iqr_multiplier']}_{subset_str}"
+
+
 # ---------------------------------------------------------------------------
 # Profile enrichment — merges profiler + outlier + anomaly + duplicate data
 # into a single flat dict per column that scorer and cleaner both consume
 # ---------------------------------------------------------------------------
 
-def _build_enriched_profile(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+def _build_enriched_profile(
+    df: pd.DataFrame,
+    iqr_multiplier: float | None = None,
+    duplicate_subset: list[str] | None = None,
+) -> dict[str, dict[str, Any]]:
     try:
         raw_profile    = generate_profile(df)
         anomaly_report = run_duckdb_anomalies(df)
-        dup_report     = detect_duplicates(df)
+        dup_report     = detect_duplicates(df, subset=duplicate_subset)
         total_rows     = len(df)
 
         enriched: dict[str, dict[str, Any]] = {}
         for col_name, col_profile in raw_profile.items():
-            outlier_report = detect_outliers(df, col_name)
+            outlier_report = detect_outliers(df, col_name, iqr_multiplier=iqr_multiplier)
+
+            # Sum affected_rows from type mismatch reports
             mismatch_count = sum(
-                1 for m in anomaly_report.type_mismatches
+                int(m.get("affected_rows", 0)) for m in anomaly_report.type_mismatches
                 if m.get("column") == col_name
             )
             enriched[col_name] = {
-                "dtype":              col_profile.dtype,
-                "missing_count":      col_profile.missing_count,
-                "missing_percentage": col_profile.missing_percentage,
-                "unique_count":       col_profile.unique_count,
-                "min_value":          col_profile.min_value,
-                "max_value":          col_profile.max_value,
-                "mean_value":         col_profile.mean_value,
-                "std_value":          col_profile.std_value,
-                "top_values":         col_profile.top_values,
-                "outlier_count":      outlier_report.count,
-                "outlier_indices":    outlier_report.indices,
-                "lower_fence":        outlier_report.lower_fence,
-                "upper_fence":        outlier_report.upper_fence,
-                "mismatch_count":     mismatch_count,
-                "duplicate_count":    dup_report.count,
-                "total_rows":         total_rows,
+                "dtype":                    col_profile.dtype,
+                "missing_count":            col_profile.missing_count,
+                "missing_percentage":       col_profile.missing_percentage,
+                "unique_count":             col_profile.unique_count,
+                "min_value":                col_profile.min_value,
+                "max_value":                col_profile.max_value,
+                "mean_value":               col_profile.mean_value,
+                "std_value":                col_profile.std_value,
+                "top_values":               col_profile.top_values,
+                "outlier_count":            outlier_report.count,
+                "outlier_indices":          outlier_report.indices,
+                "lower_fence":              outlier_report.lower_fence,
+                "upper_fence":              outlier_report.upper_fence,
+                "mismatch_count":           mismatch_count,
+                "duplicate_count":          0,  # Decoupled to avoid multi-column penalty amplification
+                "dataset_duplicate_count":  dup_report.count,
+                "total_rows":               total_rows,
             }
         return enriched
     except Exception as e:
@@ -178,6 +200,44 @@ def _build_column_scores(profile: dict[str, dict[str, Any]]) -> dict[str, int]:
         return {col_name: score_column(stats) for col_name, stats in profile.items()}
     except Exception as e:
         raise OrchestrationError(f"Column score computation failure: {e}")
+
+
+def dataset_duplicate_count_from_profile(profile: dict[str, dict[str, Any]]) -> int:
+    if not profile:
+        return 0
+    first_col = next(iter(profile.values()))
+    return int(first_col.get("dataset_duplicate_count", 0))
+
+
+def build_or_get_cached_analysis(df: pd.DataFrame) -> tuple[dict[str, dict[str, Any]], dict[str, int], int, list[Any]]:
+    params = current_runtime_audit_parameters()
+    fingerprint = _analysis_fingerprint(df, params)
+
+    if (
+        st.session_state.get("profile") is None
+        or st.session_state.get("analysis_fingerprint") != fingerprint
+    ):
+        profile = _build_enriched_profile(
+            df,
+            iqr_multiplier=params["iqr_multiplier"],
+            duplicate_subset=params["duplicate_subset"],
+        )
+        col_scores = _build_column_scores(profile)
+        overall_score = score_dataframe(profile)
+        issues = generate_issue_summary(profile)
+
+        st.session_state["profile"] = profile
+        st.session_state["col_scores"] = col_scores
+        st.session_state["overall_score"] = overall_score
+        st.session_state["issues"] = issues
+        st.session_state["analysis_fingerprint"] = fingerprint
+
+    return (
+        st.session_state["profile"],
+        st.session_state["col_scores"],
+        st.session_state["overall_score"],
+        st.session_state["issues"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -552,6 +612,7 @@ def main() -> None:
             st.session_state["col_scores"]    = None
             st.session_state["overall_score"] = None
             st.session_state["issues"]        = None
+            st.session_state["analysis_fingerprint"] = None
 
         active_df: pd.DataFrame | None = st.session_state.get("raw_df")
 
@@ -568,26 +629,11 @@ def main() -> None:
         )
         st.markdown("---")
 
-        # Run analysis once and cache in session state
-        if st.session_state.get("profile") is None:
-            with st.spinner("SCANNING DATA MATRIX..."):
-                prof = _build_enriched_profile(active_df)
-                scores = _build_column_scores(prof)
-                ov_score = score_dataframe(prof)
-                iss = generate_issue_summary(prof)
+        # Run analysis once (or when sidebar parameters change) and cache in session state
+        with st.spinner("SCANNING DATA MATRIX..."):
+            profile, col_scores, overall_score, issues = build_or_get_cached_analysis(active_df)
 
-                st.session_state["profile"]       = prof
-                st.session_state["col_scores"]    = scores
-                st.session_state["overall_score"] = ov_score
-                st.session_state["issues"]        = iss
-
-        profile: dict[str, dict[str, Any]] = st.session_state["profile"]
-        col_scores: dict[str, int]         = st.session_state["col_scores"]
-        overall_score: int                 = st.session_state["overall_score"]
-        issues: list[Any]                  = st.session_state["issues"]
-
-        dup_report = detect_duplicates(active_df)
-        duplicate_count = dup_report.count
+        duplicate_count = dataset_duplicate_count_from_profile(profile)
 
         # --- Dashboard ---
         render_overview_metrics(overall_score, profile, issues)

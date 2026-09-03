@@ -1,11 +1,11 @@
 # core/profiler.py
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict
 
 import duckdb
-import numpy as np
 import pandas as pd
 import polars as pl
 import tomllib
@@ -88,7 +88,6 @@ class AnomalyReport:
 
 def load_config() -> AppConfig:
     try:
-        # Resolve config.toml at repo root (two levels up from src/core/profiler.py)
         config_path = Path(__file__).resolve().parents[2] / "config.toml"
         with open(config_path, "rb") as f:
             return tomllib.load(f)  # type: ignore
@@ -111,6 +110,16 @@ def load_config() -> AppConfig:
 
 _CONFIG: AppConfig = load_config()
 _IQR_MULTIPLIER: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
+
+
+def _to_float_or_none(val: Any) -> float | None:
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return None if math.isnan(f) else f
+    except (ValueError, TypeError):
+        return None
 
 
 def scan_file_lazy(path: Path | str) -> pl.LazyFrame:
@@ -142,10 +151,9 @@ def _get_lazyframe(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> pl.L
 
 def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> dict[str, ColumnProfile]:
     try:
-        lf = _get_lazyframe(df_or_lf)
+        lf = _get_lazyframe(df_or_lf).cache()
         schema = lf.collect_schema()
 
-        # Calculate total row count lazily
         total_rows = lf.select(pl.len()).collect().item()
 
         profile_results: dict[str, ColumnProfile] = {}
@@ -165,12 +173,11 @@ def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> di
                 )
             return profile_results
 
-        # Aggregate missing count, n_unique, min, max, mean, std lazily across all columns
         agg_exprs = []
         for col, dtype in schema.items():
             agg_exprs.extend([
                 pl.col(col).null_count().alias(f"{col}__null_count"),
-                pl.col(col).n_unique().alias(f"{col}__n_unique"),
+                pl.col(col).drop_nulls().n_unique().alias(f"{col}__n_unique"),
                 pl.col(col).min().alias(f"{col}__min"),
                 pl.col(col).max().alias(f"{col}__max"),
             ])
@@ -187,7 +194,6 @@ def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> di
             missing_pct = float((missing_cnt / total_rows) * 100) if total_rows > 0 else 0.0
             unique_cnt = int(metrics_df[f"{col}__n_unique"].item())
 
-            # Top 5 value counts using Polars lazy execution
             try:
                 top_df = (
                     lf.select(pl.col(col))
@@ -209,13 +215,10 @@ def generate_profile(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> di
             max_v = metrics_df[f"{col}__max"].item()
 
             if dtype.is_numeric():
-                mean_v_raw = metrics_df[f"{col}__mean"].item()
-                std_v_raw = metrics_df[f"{col}__std"].item()
-
-                mean_v = float(mean_v_raw) if mean_v_raw is not None and not np.isnan(mean_v_raw) else None
-                std_v = float(std_v_raw) if std_v_raw is not None and not np.isnan(std_v_raw) else None
-                min_v = float(min_v) if min_v is not None and not np.isnan(min_v) else None
-                max_v = float(max_v) if max_v is not None and not np.isnan(max_v) else None
+                mean_v = _to_float_or_none(metrics_df[f"{col}__mean"].item())
+                std_v = _to_float_or_none(metrics_df[f"{col}__std"].item())
+                min_v = _to_float_or_none(min_v)
+                max_v = _to_float_or_none(max_v)
             else:
                 mean_v = None
                 std_v = None
@@ -243,19 +246,17 @@ def detect_duplicates(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, subs
     try:
         lf = _get_lazyframe(df_or_lf)
 
-        # Attach row index lazily and find duplicate rows
         indexed_lf = lf.with_row_index("__row_id__")
 
         cols = subset if subset else [c for c in lf.collect_schema().names()]
         if not cols:
             return DuplicateReport(count=0, indices=[])
 
-        # Filter duplicates where count > 1 and row_id != first row_id in group
         dup_indices_df = (
             indexed_lf.with_columns(
-                pl.int_range(0, pl.len()).over(cols).alias("__dup_rank__")
+                pl.col("__row_id__").rank(method="ordinal").over(cols).alias("__dup_rank__")
             )
-            .filter(pl.col("__dup_rank__") > 0)
+            .filter(pl.col("__dup_rank__") > 1)
             .select("__row_id__")
             .collect()
         )
@@ -277,20 +278,21 @@ def detect_outliers(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame, column
         dtype = schema[column]
         multiplier = iqr_multiplier if iqr_multiplier is not None else _IQR_MULTIPLIER
 
-        # Skip non-numeric and boolean types
         if not dtype.is_numeric() or dtype == pl.Boolean:
             return OutlierReport(count=0, indices=[], lower_fence=0.0, upper_fence=0.0)
 
-        # Compute quantiles lazily
         quantiles = lf.select([
-            pl.col(column).quantile(0.25).alias("q25"),
-            pl.col(column).quantile(0.75).alias("q75")
+            pl.col(column).quantile(0.25, interpolation="nearest").alias("q25"),
+            pl.col(column).quantile(0.75, interpolation="nearest").alias("q75")
         ]).collect()
 
-        q25 = quantiles["q25"].item()
-        q75 = quantiles["q75"].item()
+        q25_raw = quantiles["q25"].item()
+        q75_raw = quantiles["q75"].item()
 
-        if q25 is None or q75 is None or np.isnan(q25) or np.isnan(q75):
+        q25 = _to_float_or_none(q25_raw)
+        q75 = _to_float_or_none(q75_raw)
+
+        if q25 is None or q75 is None:
             return OutlierReport(count=0, indices=[], lower_fence=0.0, upper_fence=0.0)
 
         iqr = float(q75 - q25)
@@ -352,30 +354,34 @@ def run_duckdb_anomalies(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -
         for col_info in schema_res:
             col_name = str(col_info[1])
             col_type = str(col_info[2])
-            escaped_col = f'"{col_name}"'
+            safe_col = f'"{col_name.replace('"', '""')}"'
 
             null_check = ctx.execute(
-                f"SELECT COUNT(*) FROM df_view WHERE {escaped_col} IS NULL"
+                f"SELECT COUNT(*) FROM df_view WHERE {safe_col} IS NULL"
             ).fetchone()
             if null_check and null_check[0] == total_rows:
                 null_cols.append(col_name)
                 continue
 
-            if col_type in ("BIGINT", "DOUBLE", "INTEGER", "HUGEINT", "FLOAT"):
+            non_null_cnt_query = f"SELECT COUNT(*) FROM df_view WHERE {safe_col} IS NOT NULL"
+            non_null_res = ctx.execute(non_null_cnt_query).fetchone()
+            non_null_cnt = non_null_res[0] if non_null_res else 0
+
+            if col_type in ("BIGINT", "DOUBLE", "INTEGER", "HUGEINT", "FLOAT") and non_null_cnt > 0:
                 zero_check = ctx.execute(
-                    f"SELECT COUNT(*) FROM df_view WHERE {escaped_col} = 0"
+                    f"SELECT COUNT(*) FROM df_view WHERE {safe_col} = 0"
                 ).fetchone()
-                if zero_check and zero_check[0] == total_rows:
+                if zero_check and zero_check[0] == non_null_cnt:
                     zero_cols.append(col_name)
 
-            if col_type in ("VARCHAR", "TEXT"):
+            if col_type in ("VARCHAR", "TEXT") and non_null_cnt > 0:
                 numeric_pattern_query = f"""
                     SELECT COUNT(*) FROM df_view
-                    WHERE {escaped_col} IS NOT NULL
-                    AND TRY_CAST({escaped_col} AS DOUBLE) IS NOT NULL
+                    WHERE {safe_col} IS NOT NULL
+                    AND TRY_CAST({safe_col} AS DOUBLE) IS NOT NULL
                 """
                 num_pattern_cnt = ctx.execute(numeric_pattern_query).fetchone()
-                if num_pattern_cnt and 0 < num_pattern_cnt[0] < total_rows:
+                if num_pattern_cnt and 0 < num_pattern_cnt[0] < non_null_cnt:
                     mismatches.append({
                         "column": col_name,
                         "issue": "Mixed numeric and text patterns detected",
@@ -387,8 +393,8 @@ def run_duckdb_anomalies(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -
                     try:
                         email_fail_query = f"""
                             SELECT COUNT(*) FROM df_view
-                            WHERE {escaped_col} IS NOT NULL
-                            AND NOT {regex_fn}({escaped_col}, '{email_regex}')
+                            WHERE {safe_col} IS NOT NULL
+                            AND NOT {regex_fn}({safe_col}, '{email_regex}')
                         """
                         email_fail_cnt = ctx.execute(email_fail_query).fetchone()
                         if email_fail_cnt and email_fail_cnt[0] > 0:
@@ -403,9 +409,9 @@ def run_duckdb_anomalies(df_or_lf: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -
                 if "date" in col_name.lower():
                     date_fail_query = f"""
                         SELECT COUNT(*) FROM df_view
-                        WHERE {escaped_col} IS NOT NULL
-                        AND TRY_CAST({escaped_col} AS DATE) IS NULL
-                        AND TRY_CAST({escaped_col} AS TIMESTAMP) IS NULL
+                        WHERE {safe_col} IS NOT NULL
+                        AND TRY_CAST({safe_col} AS DATE) IS NULL
+                        AND TRY_CAST({safe_col} AS TIMESTAMP) IS NULL
                     """
                     date_fail_cnt = ctx.execute(date_fail_query).fetchone()
                     if date_fail_cnt and date_fail_cnt[0] > 0:

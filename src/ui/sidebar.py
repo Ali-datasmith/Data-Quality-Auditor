@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TypedDict
 
 import pandas as pd
+import polars as pl
 import streamlit as st
 import tomllib
 
@@ -89,11 +90,11 @@ def load_sample_dataset() -> pd.DataFrame:
         sample_path = Path(__file__).resolve().parents[2] / "data" / "sample_messy.csv"
         if not sample_path.exists():
             raise FileNotFoundError(f"Bundled sample dataset missing at: {sample_path}")
-        return pd.read_csv(sample_path)
+        return pl.read_csv(sample_path, infer_schema_length=10000, try_parse_dates=True).to_pandas()
     except FileNotFoundError as e:
         raise DataLoadError(f"Data layer file reference broken: {e}")
-    except pd.errors.EmptyDataError as e:
-        raise DataLoadError(f"Sample CSV is empty: {e}")
+    except Exception as e:
+        raise DataLoadError(f"Unexpected file read error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -122,10 +123,17 @@ def render_sidebar() -> pd.DataFrame | None:
                 key="user_raw_csv_file_uploader",
             )
             if uploaded_file is not None:
-                try:
-                    active_df = pd.read_csv(uploaded_file)
-                except Exception as e:
-                    st.sidebar.error(f"Failed to parse uploaded CSV: {e}")
+                if uploaded_file.size > _MAX_SIZE_MB * 1024 * 1024:
+                    st.sidebar.error(f"File size exceeds max allowed limit of {_MAX_SIZE_MB} MB.")
+                else:
+                    try:
+                        active_df = pl.read_csv(
+                            uploaded_file,
+                            infer_schema_length=10000,
+                            try_parse_dates=True,
+                        ).to_pandas()
+                    except Exception as e:
+                        st.sidebar.error(f"Failed to parse uploaded CSV: {e}")
         else:
             if st.sidebar.button(
                 "Load Sample Dataset",

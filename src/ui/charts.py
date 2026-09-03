@@ -52,7 +52,7 @@ def load_ui_charts_config() -> UIChartsAppConfig:
 
 
 _CONFIG: UIChartsAppConfig = load_ui_charts_config()
-_IQR_MULT: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
+_DEFAULT_IQR_MULT: float = _CONFIG["detection"]["outlier_iqr_multiplier"]
 
 _THEME: dict[str, Any] = {
     "font": {"family": "Inter, sans-serif", "color": "#FAFAFA"},
@@ -75,10 +75,12 @@ def render_distribution_histogram(df: pd.DataFrame, column: str) -> None:
             st.warning(f"Column '{column}' contains no numerical data parameters to map profiles.")
             return
 
-        q25, q75 = np.percentile(clean_series, [25, 75])
+        iqr_mult = float(st.session_state.get("outlier_iqr_multiplier", _DEFAULT_IQR_MULT))
+
+        q25, q75 = np.percentile(clean_series, [25, 75], method="nearest")
         iqr = q75 - q25
-        lower_fence = q25 - (_IQR_MULT * iqr)
-        upper_fence = q75 + (_IQR_MULT * iqr)
+        lower_fence = float(q25 - (iqr_mult * iqr))
+        upper_fence = float(q75 + (iqr_mult * iqr))
 
         fig = px.histogram(
             df,
