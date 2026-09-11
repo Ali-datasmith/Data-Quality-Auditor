@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/7779eb40-8721-43c2-bc9d-5d6cbf70014a" width="100%" height="260px" style="object-fit: cover; border-radius: 8px;" alt="Data Quality Auditor Header Banner" />
+</p>
+
 # 🛡️ Data Quality Auditor
 
 [![Build Status](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml/badge.svg)](https://github.com/Ali-datasmith/Data-Quality-Auditor/actions/workflows/ci.yml)
@@ -5,6 +9,14 @@
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
 [![Polars Engine](https://img.shields.io/badge/engine-Polars%20Lazy-FFD43B.svg)](https://pypolars.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+## 🎬 System Architecture & Live Command Center Demo
+
+https://github.com/user-attachments/assets/8a2eda4f-cd14-456d-868e-8458246a1a5c
+
+---
 
 An enterprise-grade B2B Streamlit web application engineered for real-time automated data quality audits, statistical profiling, anomaly detection, and automated remediation pipelines. Powered by modern Python 3.12+ tooling, Polars lazy evaluation, DuckDB SQL pattern checks, and Argon2id security authentication.
 
